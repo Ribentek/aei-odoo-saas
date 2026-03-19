@@ -153,11 +153,18 @@ class SaleSubscription(models.Model):
         if "stage_id" not in vals:
             return res
 
-        new_stage_id = vals["stage_id"]
+        new_stage_id = int(vals["stage_id"])  # RPC may deliver as str; cast for safe comparison
 
         # Resolve known stage IDs
         stage_in_progress = self.env.ref(_STAGE_IN_PROGRESS, raise_if_not_found=False)
         stage_closed = self.env.ref(_STAGE_CLOSED, raise_if_not_found=False)
+
+        if not stage_closed:
+            logger.warning(
+                "Stage XML ID '%s' not found — instance cleanup on Closed is DISABLED. "
+                "Ensure subscription_oca is installed.",
+                _STAGE_CLOSED,
+            )
 
         for rec in self:
             old_stage_id = old_stages.get(rec.id)
@@ -226,14 +233,14 @@ class SaleSubscription(models.Model):
                             inst.tenant_id, rec.display_name,
                         )
 
-            # → Closed: delete/suspend
+            # → Closed: delete all non-deleted instances (incl. suspended)
             elif stage_closed and new_stage_id == stage_closed.id:
                 for inst in instances.filtered(
-                    lambda i: i.state in ("draft", "provisioning", "ready")
+                    lambda i: i.state in ("draft", "provisioning", "ready", "suspended")
                 ):
                     logger.info(
-                        "Subscription %s → Closed: deleting instance %s",
-                        rec.display_name, inst.tenant_id,
+                        "Subscription %s → Closed: deleting instance %s (state=%s)",
+                        rec.display_name, inst.tenant_id, inst.state,
                     )
                     try:
                         inst.action_delete()
@@ -300,5 +307,45 @@ class SaleSubscription(models.Model):
                 except Exception:
                     logger.exception(
                         "Failed to suspend overdue instance %s", inst.tenant_id
+                    )
+
+    @api.model
+    def _cron_sync_closed_subscriptions(self):
+        """Safety net cron: delete any instance still active on a Closed subscription.
+
+        Runs hourly. Catches cases where the write() stage-change hook was bypassed
+        (e.g., portal API was down, bulk SQL update, or exception during transition).
+        """
+        stage_closed = self.env.ref(_STAGE_CLOSED, raise_if_not_found=False)
+        if not stage_closed:
+            logger.warning(
+                "_cron_sync_closed_subscriptions: stage '%s' not found — skipping.",
+                _STAGE_CLOSED,
+            )
+            return
+
+        closed_subs = self.search([("stage_id", "=", stage_closed.id)])
+        logger.info(
+            "_cron_sync_closed_subscriptions: checking %d closed subscriptions",
+            len(closed_subs),
+        )
+
+        for sub in closed_subs:
+            instances = self.env["saas.instance"].search([
+                ("subscription_id", "=", sub.id),
+                ("state", "not in", ["deleted"]),
+            ])
+            for inst in instances:
+                logger.warning(
+                    "_cron_sync_closed: active instance %s (state=%s) found on "
+                    "closed subscription %s — deleting now.",
+                    inst.tenant_id, inst.state, sub.display_name,
+                )
+                try:
+                    inst.action_delete()
+                except Exception:
+                    logger.exception(
+                        "_cron_sync_closed: failed to delete instance %s",
+                        inst.tenant_id,
                     )
 

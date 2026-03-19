@@ -10,4 +10,15 @@
     <field name="interval_type">days</field>
     <field name="active">True</field>
   </record>
+
+  <!-- Hourly safety-net: delete instances still active on Closed subscriptions -->
+  <record id="ir_cron_sync_closed_subscriptions" model="ir.cron">
+    <field name="name">SaaS: Sync Closed Subscription Instances</field>
+    <field name="model_id" ref="subscription_oca.model_sale_subscription"/>
+    <field name="state">code</field>
+    <field name="code">model._cron_sync_closed_subscriptions()</field>
+    <field name="interval_number">1</field>
+    <field name="interval_type">hours</field>
+    <field name="active">True</field>
+  </record>
 </odoo>
