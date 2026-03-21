@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+
+        <!-- ── Extend sale.subscription.template form ───────────────── -->
+        <record id="view_sale_subscription_template_form_saas" model="ir.ui.view">
+            <field name="name">sale.subscription.template.form.saas</field>
+            <field name="model">sale.subscription.template</field>
+            <field name="inherit_id" ref="subscription_oca.sale_subscription_template_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//sheet" position="inside">
+                    <group string="Per-User Pricing" col="4">
+                        <field name="included_users"/>
+                        <field name="price_per_extra_user"/>
+                    </group>
+                </xpath>
+            </field>
+        </record>
+
+    </data>
+</odoo>

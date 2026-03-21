@@ -16,8 +16,8 @@ Internet → Cloudflare Tunnel → Traefik (K3s ingress)
 ```
 
 **Init container flow (every pod restart):**
-1. `copy-addon` (alpine/git) — clona el repo `main` con `--depth=1` y copia los addons a `/mnt/extra-addons`
-2. `render-config` (alpine) — usa `envsubst` para inyectar secretos en `odoo.conf`
+1. `copy-addon` (alpine/git) — clona el repo `main` con `--depth=1` y copia los addons a `/mnt/extra-addons` (incluye `subscription_oca` desde un fork OCA externo)
+2. `render-config` (alpine) — usa `sed` para reemplazar placeholders `REPLACE_*` con valores de secretos en `odoo.conf`
 3. `odoo:18` inicia leyendo `/etc/odoo/odoo.conf` y `/mnt/extra-addons`
 
 ---
@@ -30,7 +30,7 @@ Internet → Cloudflare Tunnel → Traefik (K3s ingress)
 | `odoo_k8s_saas` | UI admin de instancias SaaS (kanban, estados, acciones K8s) |
 | `odoo_k8s_saas_subscription` | Bridge de suscripciones OCA ↔ SaaS instances |
 | `sale_automatic_workflow` | Confirmación automática de SO (OCA) |
-| `subscription_oca` | Contratos de suscripción recurrentes (OCA fork 18.0) |
+| `subscription_oca` | Contratos de suscripción recurrentes — clonado desde [jpvargassoruco/odoo18-oca-contract](https://github.com/jpvargassoruco/odoo18-oca-contract) (OCA fork 18.0) |
 
 ---
 
@@ -63,12 +63,12 @@ nano .secrets.env          # completar TODOS los valores — nunca hacer commit 
 
 **Variables requeridas en `.secrets.env`:**
 
-| Variable | Descripción | Ejemplo |
-|---|---|---|
-| `DB_PASSWORD` | Contraseña del usuario `odoo` en PostgreSQL | `S3cre7DB!` |
-| `ADMIN_PASSWD` | Master password de Odoo (para gestión de bases de datos) | `MasterP4ss!` |
-| `API_KEY` | Clave secreta del portal FastAPI (Bearer token) | `uuid4-largo` |
-| `CLOUDFLARE_TUNNEL_TOKEN` | Token del tunnel en Cloudflare Zero Trust Dashboard | `eyJ...` |
+| Variable | Requerida | Descripción | Ejemplo |
+|---|---|---|---|
+| `DB_PASSWORD` | ✅ sí | Contraseña del usuario `odoo` en PostgreSQL | `S3cre7DB!` |
+| `ADMIN_PASSWD` | ✅ sí | Master password de Odoo (para gestión de bases de datos) | `MasterP4ss!` |
+| `API_KEY` | ✅ sí | Clave secreta del portal FastAPI (Bearer token) | `uuid4-largo` |
+| `CLOUDFLARE_TUNNEL_TOKEN` | ⚡ opcional | Token del tunnel en Cloudflare Zero Trust Dashboard | `eyJ...` |
 
 > **`.secrets.env` está en `.gitignore` — nunca se commitea.**
 > El script `apply-manifests.sh` lo inyecta como Kubernetes Secrets al momento del despliegue.
@@ -156,9 +156,9 @@ kubectl rollout restart deployment/odoo-admin -n odoo-admin
 kubectl rollout status deployment/odoo-admin -n odoo-admin
 ```
 
-> **Nota:** el deployment ya incluye `-u payment_qr_mercantil` en el entrypoint del container
-> (`args: ["-u", "payment_qr_mercantil"]`), por lo que ese módulo se auto-actualiza en cada restart.
-> Los demás módulos requieren el comando explícito cuando hay cambios de esquema.
+> **Nota:** ningún módulo se auto-actualiza en restart. El container Odoo inicia sin flag `-u`.
+> Para actualizar módulos tras cambios de esquema, ejecutar el comando `odoo -u <módulo>` manualmente.
+> Ver la sección "Cuando hay cambios de esquema" en [DEPLOY.md](DEPLOY.md) para el procedimiento detallado.
 
 ---
 
@@ -181,7 +181,7 @@ POD=$(kubectl get pod -n odoo-admin -l app=odoo-admin -o jsonpath='{.items[0].me
 kubectl logs -n odoo-admin $POD -f
 ```
 
-> No hay CI/CD automático para odoo-admin. El portal **sí** tiene CI via GitHub Actions (`build-portal.yaml`).
+> No hay CI/CD automático para odoo-admin. El portal **sí** tiene CI via GitHub Actions ([`ci.yaml`](.github/workflows/ci.yaml)) que hace build + push a GHCR. El deploy del portal es manual después del push.
 
 ---
 
@@ -253,12 +253,19 @@ odoo-saas-mvp/
 │   ├── install-traefik.sh           # Instala Traefik via Helm
 │   ├── apply-manifests.sh           # Aplica todos los manifests (lee .secrets.env)
 │   └── create-cf-route.sh           # Helper para rutas Cloudflare
-├── scripts/                          # Scripts de utilidad / diagnóstico
+├── scripts/
+│   └── reset_transactional_data.sql # SQL para limpiar datos transaccionales
+├── k8s/dev/
+│   └── 00-dev-secrets.yaml          # Secretos para entorno local de desarrollo
+├── dev-setup.sh                      # Bootstrap automático K3s local (WSL / Linux)
 ├── .secrets.env.example              # Plantilla — copiar a .secrets.env y completar
 ├── .gitignore                        # .secrets.env excluido
 └── .github/workflows/
-    └── build-portal.yaml             # CI: build + push portal:latest en push a main
+    └── ci.yaml                       # CI: build + push portal:latest a GHCR en push a main
 ```
+
+> **Nota:** `subscription_oca` no está en este repositorio. El init container lo clona de
+> [jpvargassoruco/odoo18-oca-contract](https://github.com/jpvargassoruco/odoo18-oca-contract) (branch `18.0`).
 
 ---
 
@@ -276,17 +283,14 @@ El `IngressRoute` de Traefik por tenant enruta por header `Host:`.
 
 ## GitHub Actions CI (portal solamente)
 
-Secrets requeridos en el repo GitHub:
+El workflow [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml) usa permisos `packages: write` y `GITHUB_TOKEN` (automático, no requiere configuración manual).
 
-| Secret | Descripción |
-|---|---|
-| `VM_HOST` | IP o hostname del servidor |
-| `VM_SSH_KEY` | Clave SSH privada para `root@VM_HOST` |
+En cada push a `main`:
+1. Build imagen Docker del portal con Docker Buildx + layer cache
+2. Push a `ghcr.io/jpvargassoruco/odoo-saas-mvp/portal:latest` y `:$SHA`
+3. **Deploy manual:** SSH al servidor y ejecutar `kubectl -n aeisoftware rollout restart deployment/portal`
 
-En cada push a `main` que toque `portal/`:
-1. Build imagen Docker del portal
-2. Push a `ghcr.io/jpvargassoruco/odoo-saas-mvp/portal:latest`
-3. SSH al servidor → `kubectl rollout restart deployment/portal`
+> El deploy del portal no es automático. Tras el push a GHCR, el operador debe reiniciar el deployment manualmente.
 
 ---
 

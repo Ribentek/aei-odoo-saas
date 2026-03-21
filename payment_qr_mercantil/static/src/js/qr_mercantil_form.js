@@ -90,7 +90,14 @@ function startQRPolling() {
     if (simulateBtn && simulateUrlInput) {
         const simulateUrl = simulateUrlInput.value;
 
+        // Guard flag: prevents double-execution from rapid double-clicks or slow network.
+        // Set synchronously before the first await so any second click is rejected
+        // before any fetch() is issued.
+        let isSimulating = false;
+
         simulateBtn.addEventListener("click", async () => {
+            if (isSimulating) return;  // Reentrada bloqueada — ya hay un request en vuelo
+            isSimulating = true;
             simulateBtn.disabled = true;
             simulateBtn.textContent = "Procesando...";
 
@@ -117,8 +124,9 @@ function startQRPolling() {
                         window.location.href = result.landing_route || landingRoute;
                     }, 1200);
                 } else {
+                    isSimulating = false;  // Liberar guard: el usuario puede reintentar
                     simulateBtn.disabled = false;
-                    simulateBtn.textContent = "Simular Pago (Demo)";
+                    simulateBtn.textContent = "✅ Simular Pago (Demo)";
                     const errMsg = result.message || "error desconocido";
                     if (msgEl) {
                         msgEl.innerHTML =
@@ -127,8 +135,9 @@ function startQRPolling() {
                 }
             } catch (e) {
                 console.error("QR Mercantil simulate error:", e);
+                isSimulating = false;  // Liberar guard: el usuario puede reintentar
                 simulateBtn.disabled = false;
-                simulateBtn.textContent = "Simular Pago (Demo)";
+                simulateBtn.textContent = "✅ Simular Pago (Demo)";
                 if (msgEl) {
                     msgEl.innerHTML =
                         '<span class="text-danger">Error de red al simular pago.</span>';

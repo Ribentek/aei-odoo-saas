@@ -21,4 +21,16 @@
     <field name="interval_type">hours</field>
     <field name="active">True</field>
   </record>
+
+  <!-- Hourly: sync user counts from portal API -->
+  <record id="ir_cron_sync_user_count" model="ir.cron">
+    <field name="name">SaaS: Sync User Count from Portal</field>
+    <field name="model_id" ref="subscription_oca.model_sale_subscription"/>
+    <field name="state">code</field>
+    <field name="code">model._cron_sync_user_count()</field>
+    <field name="interval_number">1</field>
+    <field name="interval_type">hours</field>
+    <field name="active">True</field>
+  </record>
 </odoo>
+

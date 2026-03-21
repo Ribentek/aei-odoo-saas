@@ -13,6 +13,7 @@
         'data/ir_cron.xml',
         'views/saas_instance_views.xml',
         'views/sale_subscription_views.xml',
+        'views/subscription_template_views.xml',
         'views/subscription_portal_templates.xml',
     ],
     'installable': True,

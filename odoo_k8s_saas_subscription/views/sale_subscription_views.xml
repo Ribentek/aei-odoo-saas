@@ -39,6 +39,15 @@
                     />
                 </xpath>
 
+                <!-- Per-user billing info group -->
+                <xpath expr="//sheet" position="inside">
+                    <group string="User Billing" col="4">
+                        <field name="current_user_count"/>
+                        <field name="extra_users"/>
+                        <field name="extra_users_amount" widget="monetary"/>
+                    </group>
+                </xpath>
+
             </field>
         </record>
 

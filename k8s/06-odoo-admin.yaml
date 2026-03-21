@@ -1,6 +1,7 @@
 ---
 # Single shared Odoo 18 instance for admin use (admin.aeisoftware.com)
-# Includes odoo_k8s_saas and odoo_k8s_saas_subscription addons, cloned from main on each pod start.
+# Includes odoo_k8s_saas and odoo_k8s_saas_subscription addons, cloned
+# from the branch specified by addon-git-branch on each pod start.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -35,6 +36,7 @@ metadata:
   name: odoo-admin-conf
   namespace: odoo-admin
 data:
+  addon-git-branch: "feature/per-user-billing"
   odoo.conf.tmpl: |
     [options]
     db_host = postgres.aeisoftware.svc.cluster.local
@@ -74,12 +76,19 @@ spec:
         - name: copy-addon
           image: alpine/git
           imagePullPolicy: Always
+          env:
+            - name: ADDON_GIT_BRANCH
+              valueFrom:
+                configMapKeyRef:
+                  name: odoo-admin-conf
+                  key: addon-git-branch
           command:
             - sh
             - -c
             - |
-              # Clone main SaaS repo (base addons + payment_qr_mercantil)
-              git clone --depth=1 -b main https://github.com/jpvargassoruco/odoo-saas-mvp.git /tmp/repo
+              echo "==> Cloning branch: $ADDON_GIT_BRANCH"
+              # Clone SaaS repo (base addons + payment_qr_mercantil)
+              git clone --depth=1 -b "$ADDON_GIT_BRANCH" https://github.com/jpvargassoruco/odoo-saas-mvp.git /tmp/repo
               cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
               cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
               cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/

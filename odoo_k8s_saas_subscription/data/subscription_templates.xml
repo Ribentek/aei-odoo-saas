@@ -7,19 +7,26 @@
             <field name="name">SaaS Starter (Monthly)</field>
             <field name="recurring_interval">1</field>
             <field name="recurring_rule_type">months</field>
+            <field name="included_users">3</field>
+            <field name="price_per_extra_user">5.0</field>
         </record>
 
         <record id="subscription_template_saas_pro" model="sale.subscription.template">
             <field name="name">SaaS Pro (Monthly)</field>
             <field name="recurring_interval">1</field>
             <field name="recurring_rule_type">months</field>
+            <field name="included_users">10</field>
+            <field name="price_per_extra_user">3.0</field>
         </record>
 
         <record id="subscription_template_saas_enterprise" model="sale.subscription.template">
             <field name="name">SaaS Enterprise (Monthly)</field>
             <field name="recurring_interval">1</field>
             <field name="recurring_rule_type">months</field>
+            <field name="included_users">50</field>
+            <field name="price_per_extra_user">2.0</field>
         </record>
 
     </data>
 </odoo>
+

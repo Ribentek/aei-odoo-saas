@@ -11,6 +11,8 @@
                 <xpath expr="//field[@name='sale_order_id']" position="after">
                     <field name="subscription_id"/>
                     <field name="subscription_stage"/>
+                    <field name="user_count"/>
+                    <field name="max_users"/>
                 </xpath>
             </field>
         </record>
@@ -23,6 +25,8 @@
             <field name="arch" type="xml">
                 <xpath expr="//field[@name='state']" position="before">
                     <field name="subscription_stage" optional="hide"/>
+                    <field name="user_count" optional="show"/>
+                    <field name="max_users" optional="hide"/>
                 </xpath>
             </field>
         </record>

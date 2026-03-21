@@ -10,12 +10,18 @@ Stage transitions:
   → Closed      : delete/suspend the linked saas.instance
 """
 import logging
+import os
 import re
+
+import requests
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 
 logger = logging.getLogger(__name__)
+
+PORTAL_URL = os.getenv("SAAS_PORTAL_URL", "http://portal.aeisoftware.svc.cluster.local:8000")
+PORTAL_KEY = os.getenv("SAAS_PORTAL_KEY", "")
 
 # Stage XML IDs from subscription_oca
 _STAGE_IN_PROGRESS = "subscription_oca.subscription_stage_in_progress"
@@ -35,6 +41,24 @@ class SaleSubscription(models.Model):
         compute="_compute_saas_instance_count",
     )
 
+    # ── Per-user billing computed fields ──────────────────────────
+    current_user_count = fields.Integer(
+        string="Current Users",
+        compute="_compute_user_billing",
+        help="Sum of active users across all instances linked to this subscription.",
+    )
+    extra_users = fields.Integer(
+        string="Extra Users",
+        compute="_compute_user_billing",
+        help="Number of users beyond the included amount.",
+    )
+    extra_users_amount = fields.Float(
+        string="Extra Users Amount",
+        compute="_compute_user_billing",
+        digits="Product Price",
+        help="Monthly charge for extra users (extra_users × price_per_extra_user).",
+    )
+
     @api.depends_context("uid")
     def _compute_saas_instance_count(self):
         Instance = self.env["saas.instance"]
@@ -45,6 +69,23 @@ class SaleSubscription(models.Model):
             ])
             rec.saas_instance_count = len(instances)
             rec.has_active_instance = bool(instances)
+
+    @api.depends("template_id.included_users", "template_id.price_per_extra_user")
+    def _compute_user_billing(self):
+        Instance = self.env["saas.instance"]
+        for rec in self:
+            instances = Instance.search([
+                ("subscription_id", "=", rec.id),
+                ("state", "not in", ["deleted"]),
+            ])
+            total_users = sum(instances.mapped("user_count"))
+            included = rec.template_id.included_users if rec.template_id else 0
+            extra = max(0, total_users - included)
+            price = rec.template_id.price_per_extra_user if rec.template_id else 0.0
+
+            rec.current_user_count = total_users
+            rec.extra_users = extra
+            rec.extra_users_amount = extra * price
 
     # ── Portal mixin ────────────────────────────────────────────
     def _compute_access_url(self):
@@ -385,4 +426,37 @@ class SaleSubscription(models.Model):
                         "_cron_sync_closed: failed to delete instance %s",
                         inst.tenant_id,
                     )
+
+    @api.model
+    def _cron_sync_user_count(self):
+        """Cron: sync active-user counts from the portal API.
+
+        Calls GET /api/v1/instances/{tenant_id} for each active instance
+        and updates saas.instance.user_count.
+        """
+        instances = self.env["saas.instance"].search([
+            ("state", "in", ["ready", "provisioning"]),
+        ])
+        logger.info("_cron_sync_user_count: syncing %d instances", len(instances))
+        for inst in instances:
+            try:
+                resp = requests.get(
+                    f"{PORTAL_URL}/api/v1/instances/{inst.tenant_id}",
+                    headers={"X-API-Key": PORTAL_KEY},
+                    timeout=10,
+                )
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                user_count = data.get("user_count", 0)
+                if user_count != inst.user_count:
+                    inst.user_count = user_count
+                    logger.info(
+                        "_cron_sync_user_count: %s → %d users",
+                        inst.tenant_id, user_count,
+                    )
+            except Exception:
+                logger.exception(
+                    "_cron_sync_user_count: failed for %s", inst.tenant_id
+                )
 

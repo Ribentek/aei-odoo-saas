@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feature/*"]
   pull_request:
-    branches: [main]
+    branches: [main, "feature/*"]
 
 jobs:
   build-portal:
@@ -23,8 +23,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        # Only needed for push — skip on PRs
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -35,9 +34,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: portal
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          push: ${{ github.event_name == 'push' }}
           tags: |
-            ghcr.io/${{ github.repository_owner }}/odoo-saas-mvp/portal:latest
+            ghcr.io/${{ github.repository_owner }}/odoo-saas-mvp/portal:${{ github.ref_name }}
             ghcr.io/${{ github.repository_owner }}/odoo-saas-mvp/portal:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

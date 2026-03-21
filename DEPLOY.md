@@ -12,7 +12,7 @@
 | Deployment portal | `portal` |
 | Imagen portal | `ghcr.io/jpvargassoruco/odoo-saas-mvp/portal:latest` |
 | Repo en initContainer | `https://github.com/jpvargassoruco/odoo-saas-mvp.git` (branch `main`, `--depth=1`) |
-| Addons copiados | `payment_qr_mercantil`, `odoo_k8s_saas`, `odoo_k8s_saas_subscription`, `sale_automatic_workflow`, `subscription_oca` |
+| Addons copiados | `payment_qr_mercantil`, `odoo_k8s_saas`, `odoo_k8s_saas_subscription`, `sale_automatic_workflow` (del repo principal) + `subscription_oca` (clonado de [odoo18-oca-contract](https://github.com/jpvargassoruco/odoo18-oca-contract)) |
 
 ---
 
@@ -32,7 +32,7 @@ kubectl rollout status deployment/odoo-admin -n odoo-admin
 ```
 
 > **No hay CI/CD automático para odoo-admin.** El restart debe hacerse manualmente después del push.
-> El flag `-u payment_qr_mercantil` ya está en el `args` del container → ese módulo se auto-actualiza en cada restart.
+> Ningún módulo se auto-actualiza — el container Odoo inicia sin flag `-u`.
 
 ---
 
@@ -62,8 +62,8 @@ kubectl rollout status deployment/odoo-admin -n odoo-admin
 
 ## Portal FastAPI
 
-El portal **sí** tiene CI automático via GitHub Actions (`build-portal.yaml`).
-En cada push a `main` que toque `portal/`:
+El portal **sí** tiene CI automático via GitHub Actions ([`ci.yaml`](../.github/workflows/ci.yaml)).
+En cada push a `main`: build + push de la imagen a GHCR. El deploy del portal es **manual** tras el push.
 
 ```bash
 # Si necesitas forzar un restart manual del portal
@@ -93,11 +93,11 @@ kubectl logs -n aeisoftware statefulset/postgres -f --tail=50
 
 | Módulo | Update en restart | Descripción |
 |---|---|---|
-| `payment_qr_mercantil` | ✅ automático (`args: -u …`) | Pago por QR — Banco Mercantil Santa Cruz (mc4.com.bo) |
+| `payment_qr_mercantil` | Manual | Pago por QR — Banco Mercantil Santa Cruz (mc4.com.bo) |
 | `odoo_k8s_saas` | Manual | UI admin de instancias SaaS sobre K8s |
 | `odoo_k8s_saas_subscription` | Manual | Bridge suscripciones OCA ↔ SaaS instances |
 | `sale_automatic_workflow` | Manual | Confirmación automática de SO (OCA) |
-| `subscription_oca` | Manual | Contratos recurrentes (fork OCA 18.0) |
+| `subscription_oca` | Manual | Contratos recurrentes (fork OCA 18.0, clonado de repo externo) |
 
 ---
 
@@ -129,8 +129,8 @@ kubectl get ingress -n aeisoftware
 
 - El initContainer `copy-addon` clona `main` con `--depth=1` en **cada restart** del pod.
   Siempre hacer `push` **antes** de `rollout restart`.
-- El flag `-u` en `args` (`-u payment_qr_mercantil`) **solo actualiza ese módulo** — no los demás.
-  Correr el comando `odoo -u <módulo>` manualmente tras cambios de esquema en otros módulos.
+- **Ningún módulo se auto-actualiza.** El container Odoo inicia sin flag `-u`.
+  Correr el comando `odoo -u <módulo> --stop-after-init` manualmente tras cambios de esquema.
 - La BD `postgres` es la instancia admin. Las BDs de clientes SaaS son dinámicas (creadas por el portal).
-- El campo `odoo.conf` se renderiza en runtime via `envsubst` — **no hay secretos en git**.
+- El campo `odoo.conf` se renderiza en runtime vía `sed` (placeholders `REPLACE_*`) — **no hay secretos en git**.
 - En modo `state=test` (Prueba) el proveedor QR Mercantil **no llama al banco** y usa QRs demo SVG.

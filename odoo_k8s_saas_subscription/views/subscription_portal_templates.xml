@@ -296,6 +296,35 @@
                     </t>
                 </div>
 
+                <!-- User Usage -->
+                <div t-if="subscription.template_id and subscription.template_id.included_users"
+                     id="user_billing_details" class="mt-4">
+                    <h6><strong>User Usage</strong></h6>
+                    <div class="card">
+                        <div class="card-body py-2 px-3">
+                            <div class="row">
+                                <div class="col-6 col-md-3">
+                                    <small class="text-muted">Current Users</small><br/>
+                                    <strong><t t-esc="subscription.current_user_count"/></strong>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <small class="text-muted">Included in Plan</small><br/>
+                                    <span t-esc="subscription.template_id.included_users"/>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <small class="text-muted">Extra Users</small><br/>
+                                    <span t-esc="subscription.extra_users"/>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <small class="text-muted">Extra Charges</small><br/>
+                                    <span t-field="subscription.extra_users_amount"
+                                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Line items table -->
                 <div id="item_details">
                     <table class="table table-sm mt-4" id="subscription_lines_table">
