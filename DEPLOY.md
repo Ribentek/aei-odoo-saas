@@ -12,7 +12,7 @@
 | Deployment portal | `portal` |
 | Imagen portal | `ghcr.io/jpvargassoruco/odoo-saas-mvp/portal:latest` |
 | Repo en initContainer | `https://github.com/jpvargassoruco/odoo-saas-mvp.git` (branch `main`, `--depth=1`) |
-| Addons copiados | `payment_qr_mercantil`, `odoo_k8s_saas`, `odoo_k8s_saas_subscription`, `sale_automatic_workflow` (del repo principal) + `subscription_oca` (clonado de [odoo18-oca-contract](https://github.com/jpvargassoruco/odoo18-oca-contract)) |
+| Addons copiados | `payment_qr_mercantil`, `odoo_k8s_saas`, `odoo_k8s_saas_subscription` (del repo principal) + `subscription_oca` (clonado de [odoo18-oca-contract](https://github.com/jpvargassoruco/odoo18-oca-contract)) |
 
 ---
 
@@ -50,7 +50,7 @@ kubectl exec -n odoo-admin $POD -- \
 
 # 3. Para actualizar TODOS los módulos del repo:
 kubectl exec -n odoo-admin $POD -- \
-  odoo -u payment_qr_mercantil,odoo_k8s_saas,odoo_k8s_saas_subscription,sale_automatic_workflow,subscription_oca \
+  odoo -u payment_qr_mercantil,odoo_k8s_saas,odoo_k8s_saas_subscription,subscription_oca \
   -d postgres --stop-after-init
 
 # 4. Restart limpio tras el update
@@ -96,7 +96,6 @@ kubectl logs -n aeisoftware statefulset/postgres -f --tail=50
 | `payment_qr_mercantil` | Manual | Pago por QR — Banco Mercantil Santa Cruz (mc4.com.bo) |
 | `odoo_k8s_saas` | Manual | UI admin de instancias SaaS sobre K8s |
 | `odoo_k8s_saas_subscription` | Manual | Bridge suscripciones OCA ↔ SaaS instances |
-| `sale_automatic_workflow` | Manual | Confirmación automática de SO (OCA) |
 | `subscription_oca` | Manual | Contratos recurrentes (fork OCA 18.0, clonado de repo externo) |
 
 ---

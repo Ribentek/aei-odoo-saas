@@ -29,7 +29,6 @@ Internet → Cloudflare Tunnel → Traefik (K3s ingress)
 | `payment_qr_mercantil` | Pago por QR — Banco Mercantil Santa Cruz (mc4.com.bo) |
 | `odoo_k8s_saas` | UI admin de instancias SaaS (kanban, estados, acciones K8s) |
 | `odoo_k8s_saas_subscription` | Bridge de suscripciones OCA ↔ SaaS instances |
-| `sale_automatic_workflow` | Confirmación automática de SO (OCA) |
 | `subscription_oca` | Contratos de suscripción recurrentes — clonado desde [jpvargassoruco/odoo18-oca-contract](https://github.com/jpvargassoruco/odoo18-oca-contract) (OCA fork 18.0) |
 
 ---
@@ -148,7 +147,7 @@ POD=$(kubectl get pod -n odoo-admin -l app=odoo-admin -o jsonpath='{.items[0].me
 
 # Instalar todos los módulos del repo
 kubectl exec -n odoo-admin $POD -- \
-  odoo -u payment_qr_mercantil,odoo_k8s_saas,odoo_k8s_saas_subscription,sale_automatic_workflow,subscription_oca \
+  odoo -u payment_qr_mercantil,odoo_k8s_saas,odoo_k8s_saas_subscription,subscription_oca \
   -d postgres --stop-after-init
 
 # Luego restart limpio
@@ -247,7 +246,6 @@ odoo-saas-mvp/
 │   ├── views/                        # Kanban extendido, menús de suscripción, portal
 │   ├── data/ir_cron.xml              # Cron: suspender instancias vencidas diariamente
 │   └── security/ir.model.access.csv
-├── sale_automatic_workflow/          # OCA addon — workflow automático de SO
 ├── infra/
 │   ├── install-k3s.sh               # Instala K3s sin Traefik integrado
 │   ├── install-traefik.sh           # Instala Traefik via Helm

@@ -92,7 +92,6 @@ spec:
               cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
               cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
               cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/
-              cp -r /tmp/repo/sale_automatic_workflow /mnt/extra-addons/
               # Clone subscription_oca from OCA fork
               git clone --depth=1 -b 18.0 https://github.com/jpvargassoruco/odoo18-oca-contract.git /tmp/oca-contract
               cp -r /tmp/oca-contract/subscription_oca /mnt/extra-addons/
