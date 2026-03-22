@@ -148,7 +148,7 @@ POD=$(kubectl get pod -n odoo-admin -l app=odoo-admin -o jsonpath='{.items[0].me
 # Instalar todos los módulos del repo
 kubectl exec -n odoo-admin $POD -- \
   odoo -u payment_qr_mercantil,odoo_k8s_saas,odoo_k8s_saas_subscription,subscription_oca \
-  -d postgres --stop-after-init
+  -d postgres --stop-after-init -no-http
 
 # Luego restart limpio
 kubectl rollout restart deployment/odoo-admin -n odoo-admin
