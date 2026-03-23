@@ -17,9 +17,11 @@ class PortalSubscription(CustomerPortal):
     def _prepare_home_portal_values(self, counters):
         values = super()._prepare_home_portal_values(counters)
         if "subscription_count" in counters:
+            partner = request.env.user.partner_id
             sub_model = request.env["sale.subscription"]
+            domain = [("partner_id", "child_of", partner.ids)]
             subscription_count = (
-                sub_model.search_count([])
+                sub_model.search_count(domain)
                 if sub_model.has_access("read")
                 else 0
             )
@@ -28,9 +30,16 @@ class PortalSubscription(CustomerPortal):
 
     # ── helpers ─────────────────────────────────────────────────────
     def _subscription_get_page_view_values(self, subscription, access_token, **kwargs):
+        # Fetch linked SaaS instances (use sudo because portal users
+        # may not have direct read access on saas.instance)
+        saas_instances = request.env["saas.instance"].sudo().search([
+            ("subscription_id", "=", subscription.id),
+            ("state", "not in", ["deleted"]),
+        ])
         values = {
             "page_name": "Subscriptions",
             "subscription": subscription,
+            "saas_instances": saas_instances,
         }
         return self._get_page_view_values(
             subscription,
@@ -57,7 +66,10 @@ class PortalSubscription(CustomerPortal):
         if not sub_obj.has_access("read"):
             return request.redirect("/my")
 
-        domain = []
+        # Filter to subscriptions belonging to the logged-in partner (or children)
+        partner = request.env.user.partner_id
+        domain = [("partner_id", "child_of", partner.ids)]
+
         searchbar_sortings = {
             "name": {"label": _("Name"), "order": "name desc"},
             "date": {

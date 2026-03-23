@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_payment_provider_qr_mercantil,payment.provider qr_mercantil,payment.model_payment_provider,account.group_account_manager,1,1,1,0

@@ -1,6 +1,7 @@
 ---
 # Single shared Odoo 18 instance for admin use (admin.aeisoftware.com)
-# Includes odoo_k8s_saas and odoo_k8s_saas_subscription addons, cloned from main on each pod start.
+# Includes odoo_k8s_saas and odoo_k8s_saas_subscription addons, cloned
+# from the branch specified by addon-git-branch on each pod start.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -26,22 +27,23 @@ spec:
 # It is applied by infra/apply-manifests.sh from .secrets.env (gitignored).
 # Running `kubectl apply -f 06-odoo-admin.yaml` directly will NOT touch secrets.
 
-
+---
 # ${DB_PASSWORD} and ${ADMIN_PASSWD} are substituted at startup by the
-# render-config init container using envsubst.
+# render-config init container using sed.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: odoo-admin-conf
   namespace: odoo-admin
 data:
+  addon-git-branch: "main"
   odoo.conf.tmpl: |
     [options]
     db_host = postgres.aeisoftware.svc.cluster.local
     db_port = 5432
     db_user = odoo
-    db_password = ${DB_PASSWORD}
-    admin_passwd = ${ADMIN_PASSWD}
+    db_password = REPLACE_DB_PASSWORD
+    admin_passwd = REPLACE_ADMIN_PASSWD
     dbfilter = ^admin$
     list_db = True
     addons_path = /mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons
@@ -73,14 +75,23 @@ spec:
         # 1. Clone the SaaS addons from GitHub
         - name: copy-addon
           image: alpine/git
+          imagePullPolicy: Always
+          env:
+            - name: ADDON_GIT_BRANCH
+              valueFrom:
+                configMapKeyRef:
+                  name: odoo-admin-conf
+                  key: addon-git-branch
           command:
             - sh
             - -c
             - |
-              # Clone main SaaS repo (base addon + bridge module)
-              git clone --depth=1 -b main https://github.com/jpvargassoruco/odoo-saas-mvp.git /tmp/repo
+              echo "==> Cloning branch: $ADDON_GIT_BRANCH"
+              # Clone SaaS repo (base addons + payment_qr_mercantil)
+              git clone --depth=1 -b "$ADDON_GIT_BRANCH" https://github.com/jpvargassoruco/odoo-saas-mvp.git /tmp/repo
               cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
               cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
+              cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/
               # Clone subscription_oca from OCA fork
               git clone --depth=1 -b 18.0 https://github.com/jpvargassoruco/odoo18-oca-contract.git /tmp/oca-contract
               cp -r /tmp/oca-contract/subscription_oca /mnt/extra-addons/
@@ -90,15 +101,17 @@ spec:
             - name: odoo-addons
               mountPath: /mnt/extra-addons
 
-        # 2. Render odoo.conf from template, injecting real secret values
+        # 2. Render odoo.conf: replace REPLACE_* placeholders with real secret values
+        # Uses sed with literal placeholders (no ${} in template) to avoid YAML/shell quoting issues.
         - name: render-config
           image: alpine:3.19
           command:
             - sh
             - -c
             - |
-              apk add --no-cache gettext >/dev/null 2>&1
-              envsubst < /tmpl/odoo.conf.tmpl > /etc/odoo/odoo.conf
+              sed -e "s|REPLACE_DB_PASSWORD|${DB_PASSWORD}|g" \
+                  -e "s|REPLACE_ADMIN_PASSWD|${ADMIN_PASSWD}|g" \
+                  /tmpl/odoo.conf.tmpl > /etc/odoo/odoo.conf
               echo "odoo.conf rendered:"
               cat /etc/odoo/odoo.conf
           env:
@@ -121,6 +134,8 @@ spec:
       containers:
         - name: odoo
           image: odoo:18
+          # No --update flag: run manually with:
+          # kubectl exec -n odoo-admin deploy/odoo-admin -- odoo -u <module> --stop-after-init
           ports:
             - containerPort: 8069
             - containerPort: 8072
@@ -196,6 +211,23 @@ spec:
   ingressClassName: traefik
   rules:
     - host: admin.aeisoftware.com
+      http:
+        paths:
+          - path: /websocket
+            pathType: Prefix
+            backend:
+              service:
+                name: odoo-admin-svc
+                port:
+                  number: 8072
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: odoo-admin-svc
+                port:
+                  number: 8069
+    - host: www.aeisoftware.com
       http:
         paths:
           - path: /websocket

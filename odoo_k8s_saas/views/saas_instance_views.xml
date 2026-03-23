@@ -120,6 +120,56 @@
               <field name="namespace" readonly="1"/>
             </group>
           </group>
+
+          <!-- ─── Notebook with Config / Logs / Addons ─── -->
+          <notebook invisible="state == 'draft'">
+            <page string="⚙ Configuration" name="config_page"
+                  invisible="state not in ('ready', 'provisioning')">
+              <group>
+                <div class="d-flex gap-2 mb-3">
+                  <button name="action_fetch_config" type="object"
+                          string="⟳ Fetch Config" class="btn-secondary"
+                          invisible="state not in ('ready', 'provisioning')"/>
+                  <button name="action_save_config" type="object"
+                          string="💾 Save Config" class="btn-primary"
+                          invisible="state != 'ready'"
+                          confirm="This will overwrite odoo.conf and restart the pod. Continue?"/>
+                </div>
+              </group>
+              <field name="odoo_conf" nolabel="1"
+                     placeholder="Click 'Fetch Config' to load the current odoo.conf..."
+                     class="o_field_text" style="font-family: monospace; min-height: 300px;"/>
+            </page>
+
+            <page string="📜 Logs" name="logs_page"
+                  invisible="state in ('draft', 'deleted')">
+              <group>
+                <button name="action_fetch_logs" type="object"
+                        string="⟳ Refresh Logs" class="btn-secondary"/>
+              </group>
+              <field name="pod_logs" nolabel="1" readonly="1"
+                     placeholder="Click 'Refresh Logs' to load the latest pod output..."
+                     class="o_field_text" style="font-family: monospace; min-height: 300px; white-space: pre-wrap;"/>
+            </page>
+
+            <page string="📦 Addon Repos" name="addons_page">
+              <group>
+                <div class="alert alert-info" role="alert">
+                  Enter a JSON array of repos. Each object needs <code>url</code> and
+                  <code>branch</code>.  Example:
+                  <code>[{"url": "https://github.com/org/repo.git", "branch": "18.0"}]</code>
+                </div>
+                <field name="addons_repos_json" nolabel="1" widget="text"
+                       placeholder='[{"url": "https://github.com/org/repo.git", "branch": "18.0"}]'
+                       style="font-family: monospace; min-height: 120px;"/>
+                <button name="action_patch_addons" type="object"
+                        string="🔄 Sync Addons to Instance" class="btn-primary"
+                        invisible="state != 'ready'"
+                        confirm="This will update the addon repos and restart the tenant pod. Continue?"/>
+              </group>
+            </page>
+          </notebook>
+
           <group string="Error Details" invisible="not error_msg" col="1">
             <field name="error_msg" nolabel="1" class="text-danger"/>
           </group>

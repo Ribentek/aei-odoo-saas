@@ -73,9 +73,13 @@ def secret_manifest(tenant_id: str, db_password: str, admin_password: str) -> di
     }
 
 
-def configmap_manifest(tenant_id: str, db_password: str, admin_password: str) -> dict[str, Any]:
+def configmap_manifest(tenant_id: str, db_password: str, admin_password: str, addons_repos: list = None) -> dict[str, Any]:
     """Odoo config file per tenant — passwords are embedded at provision time."""
     db_name = _dbname(tenant_id)
+    addons_repos = addons_repos or []
+    import json
+    addons_json_str = json.dumps(addons_repos)
+
     conf = f"""[options]
 db_host = {POSTGRES_HOST}
 db_port = {POSTGRES_PORT}
@@ -85,7 +89,7 @@ admin_passwd = {admin_password}
 db_name = {db_name}
 dbfilter = ^{db_name}$
 list_db = False
-addons_path = /usr/lib/python3/dist-packages/odoo/addons
+addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons
 data_dir = /var/lib/odoo
 workers = 2
 max_cron_threads = 1
@@ -100,7 +104,10 @@ without_demo = all
             "name": "odoo-conf",
             "namespace": _ns(tenant_id),
         },
-        "data": {"odoo.conf": conf},
+        "data": {
+            "odoo.conf": conf,
+            "addons.json": addons_json_str
+        },
     }
 
 
@@ -111,6 +118,7 @@ def deployment_manifest(tenant_id: str) -> dict[str, Any]:
     _vol_mounts = [
         {"name": "odoo-conf", "mountPath": "/etc/odoo"},
         {"name": "odoo-data", "mountPath": "/var/lib/odoo"},
+        {"name": "odoo-extra-addons", "mountPath": "/mnt/extra-addons"},
     ]
     _env = [
         {"name": "DB_PASSWORD", "valueFrom": {"secretKeyRef": {"name": "odoo-secret", "key": "DB_PASSWORD"}}},
@@ -136,6 +144,36 @@ def deployment_manifest(tenant_id: str) -> dict[str, Any]:
                 "spec": {
                     # Init container: bootstrap the DB schema (workers>0 mode can't do this)
                     "initContainers": [
+                        {
+                            "name": "clone-addons",
+                            "image": "python:3.10-alpine",
+                            "command": ["/bin/sh", "-c"],
+                            "args": [
+                                "apk add --no-cache git && python3 -c '\n"
+                                "import json, os, subprocess\n"
+                                "try:\n"
+                                "    with open(\"/etc/odoo/addons.json\") as f:\n"
+                                "        addons = json.load(f)\n"
+                                "except Exception:\n"
+                                "    addons = []\n"
+                                "for repo in addons:\n"
+                                "    url = repo.get(\"url\")\n"
+                                "    branch = repo.get(\"branch\", \"\")\n"
+                                "    if not url: continue\n"
+                                "    repo_name = url.rstrip(\"/\").rsplit(\"/\", 1)[-1]\n"
+                                "    if repo_name.endswith(\".git\"): repo_name = repo_name[:-4]\n"
+                                "    dest = f\"/mnt/extra-addons/{repo_name}\"\n"
+                                "    cmd = [\"git\", \"clone\", \"--depth=1\"]\n"
+                                "    if branch:\n"
+                                "        cmd.extend([\"-b\", branch])\n"
+                                "    cmd.extend([url, dest])\n"
+                                "    print(f\"Cloning {url} branch {branch} into {dest}...\")\n"
+                                "    if not os.path.exists(dest):\n"
+                                "        subprocess.run(cmd, check=True)\n"
+                                "'"
+                            ],
+                            "volumeMounts": _vol_mounts,
+                        },
                         {
                             "name": "odoo-init",
                             "image": ODOO_IMAGE,
@@ -174,6 +212,7 @@ def deployment_manifest(tenant_id: str) -> dict[str, Any]:
                     "volumes": [
                         {"name": "odoo-conf", "configMap": {"name": "odoo-conf"}},
                         {"name": "odoo-data", "persistentVolumeClaim": {"claimName": "odoo-data"}},
+                        {"name": "odoo-extra-addons", "emptyDir": {}},
                     ],
                 },
             },
@@ -234,13 +273,13 @@ def ingress_manifest(tenant_id: str) -> dict[str, Any]:
     }
 
 
-def all_manifests(tenant_id: str, db_password: str, admin_password: str, storage_gi: int = 10) -> list[dict]:
+def all_manifests(tenant_id: str, db_password: str, admin_password: str, storage_gi: int = 10, addons_repos: list = None) -> list[dict]:
     """Return all manifests in apply-order."""
     return [
         namespace_manifest(tenant_id),
         pvc_manifest(tenant_id, storage_gi),
         secret_manifest(tenant_id, db_password, admin_password),
-        configmap_manifest(tenant_id, db_password, admin_password),
+        configmap_manifest(tenant_id, db_password, admin_password, addons_repos),
         deployment_manifest(tenant_id),
         service_manifest(tenant_id),
         ingress_manifest(tenant_id),

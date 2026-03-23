@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!--
+        QR Mercantil — Herencia de la vista nativa de payment.provider.
+        Se inyecta en los tabs estándar de Odoo 18:
+          • Credentials  → credenciales y endpoints de la API bancaria
+          • Configuration → Webhook URL (callback al banco)
+        El campo `state` nativo (Disabled / Enabled / Test Mode) reemplaza
+        el antiguo toggle "Modo Demo (Test)".
+    -->
+
+    <!-- ═══════════════════════════════════════════════════════
+         Tab CREDENTIALS — credenciales de la API bancaria
+         xpath: apunta a la page existente llamada "credentials"
+         ═══════════════════════════════════════════════════════ -->
+    <record id="payment_provider_form_qr_mercantil_credentials" model="ir.ui.view">
+        <field name="name">payment.provider.form.qr_mercantil.credentials</field>
+        <field name="model">payment.provider</field>
+        <field name="inherit_id" ref="payment.payment_provider_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='credentials']" position="inside">
+                <group invisible="code != 'qr_mercantil'">
+                    <group string="Credenciales API — Banco Mercantil Bolivia">
+                        <field name="qr_mercantil_base_url"
+                               string="URL Base API"
+                               placeholder="https://sip.mc4.com.bo:8443"/>
+                        <field name="qr_mercantil_api_key"
+                               string="API Key (Login)"
+                               password="True"
+                               help="Header 'apikey' para el endpoint de autenticación."/>
+                        <field name="qr_mercantil_api_key_service"
+                               string="API Key Servicio"
+                               password="True"
+                               help="Header 'apikeyServicio' para los endpoints de generación de QR."/>
+                        <field name="qr_mercantil_username"
+                               string="Usuario API"/>
+                        <field name="qr_mercantil_password"
+                               string="Contraseña API"
+                               password="True"/>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════════
+         Tab CONFIGURATION — opciones de integración
+         xpath: apunta a la page existente llamada "configuration"
+         ═══════════════════════════════════════════════════════ -->
+    <record id="payment_provider_form_qr_mercantil_configuration" model="ir.ui.view">
+        <field name="name">payment.provider.form.qr_mercantil.configuration</field>
+        <field name="model">payment.provider</field>
+        <field name="inherit_id" ref="payment.payment_provider_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='configuration']" position="inside">
+                <group invisible="code != 'qr_mercantil'">
+                    <group string="Webhook (Callback)">
+                        <field
+                            name="qr_mercantil_webhook_url"
+                            string="Webhook URL (Callback)"
+                            placeholder="https://admin.aeisoftware.com/payment/qr_mercantil/webhook"
+                        />
+                        <div class="text-muted small ps-2">
+                            Esta URL se env&#237;a al banco como campo <strong>callback</strong> en
+                            cada solicitud de generaci&#243;n de QR. El banco la llamar&#225; cuando
+                            el pago sea completado.<br/>
+                            Si se deja en blanco se usa el dominio de
+                            <code>web.base.url</code> + <code>/payment/qr_mercantil/webhook</code>.
+                        </div>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════════
+         Tab TOKEN CACHÉ — campos técnicos internos (sólo debug)
+         Oculto en el notebook, visible sólo en modo developer.
+         ═══════════════════════════════════════════════════════ -->
+    <record id="payment_provider_form_qr_mercantil_debug" model="ir.ui.view">
+        <field name="name">payment.provider.form.qr_mercantil.debug</field>
+        <field name="model">payment.provider</field>
+        <field name="inherit_id" ref="payment.payment_provider_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="QR Mercantil (Debug)"
+                      invisible="code != 'qr_mercantil'"
+                      groups="base.group_no_one">
+                    <group string="Caché JWT (uso interno — no editar)">
+                        <field name="qr_mercantil_token_cache"
+                               string="JWT Token cacheado"
+                               readonly="True"/>
+                        <field name="qr_mercantil_token_expires"
+                               string="Token expira (UNIX epoch)"
+                               readonly="True"/>
+                    </group>
+                    <div class="alert alert-warning" role="alert">
+                        <i class="fa fa-warning"/> Estos campos son gestionados automáticamente por el sistema.
+                        Modificarlos manualmente puede causar errores de autenticación con el banco.
+                    </div>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

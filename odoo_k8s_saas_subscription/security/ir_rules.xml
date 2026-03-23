@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Portal users can only read sale.subscription records that belong
+        to their own partner (or a child of it).  Without this rule, Odoo's
+        ORM either grants access to ALL records (if no rules exist for the
+        group) or denies access entirely.
+    -->
+    <record id="sale_subscription_rule_portal" model="ir.rule">
+        <field name="name">Subscription: portal users see only their own</field>
+        <field name="model_id" ref="subscription_oca.model_sale_subscription"/>
+        <field name="domain_force">[('partner_id', 'child_of', [user.partner_id.id])]</field>
+        <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- Model-level read access for portal on related models (stage and lines).
+         These cannot be loaded reliably from ir.model.access.csv when the
+         model external IDs belong to another module (subscription_oca), so
+         we declare them here as ir.model.access records instead. -->
+    <record id="access_sale_subscription_stage_portal" model="ir.model.access">
+        <field name="name">sale.subscription.stage portal read</field>
+        <field name="model_id" ref="subscription_oca.model_sale_subscription_stage"/>
+        <field name="group_id" ref="base.group_portal"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="access_sale_subscription_line_portal" model="ir.model.access">
+        <field name="name">sale.subscription.line portal read</field>
+        <field name="model_id" ref="subscription_oca.model_sale_subscription_line"/>
+        <field name="group_id" ref="base.group_portal"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+</odoo>

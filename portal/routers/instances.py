@@ -31,6 +31,7 @@ class CreateInstanceRequest(BaseModel):
     tenant_id: str          # slug: letters, numbers, hyphens
     plan: str = "starter"   # starter | pro | enterprise
     storage_gi: int = 10
+    addons_repos: list = []
 
     @field_validator("tenant_id")
     @classmethod
@@ -45,6 +46,7 @@ class InstanceResponse(BaseModel):
     namespace: str
     url: str
     status: str
+    user_count: int = 0
 
 
 # ── endpoints ────────────────────────────────────────────────────────────────
@@ -112,6 +114,7 @@ def create_instance(req: CreateInstanceRequest):
         db_password=db_password,
         admin_password=admin_password,
         storage_gi=req.storage_gi,
+        addons_repos=req.addons_repos,
     )
 
     for m in manifests:
@@ -139,11 +142,16 @@ def get_instance(tenant_id: str):
         raise HTTPException(status_code=404, detail="Instance not found")
 
     status = "ready" if info["ready"] else "provisioning"
+    user_count = 0
+    if status == "ready":
+        user_count = _get_user_count(tenant_id)
+        
     return InstanceResponse(
         tenant_id=tenant_id,
         namespace=namespace,
         url=f"https://{tenant_id}.{BASE_DOMAIN}",
         status=status,
+        user_count=user_count,
     )
 
 
@@ -165,6 +173,88 @@ def delete_instance(tenant_id: str):
     except Exception as exc:
         logger.warning("Could not drop Postgres user %s: %s", pg_user, exc)
 
+@router.post("/{tenant_id}/stop")
+def stop_instance(tenant_id: str):
+    """Suspend a tenant instance (scale to 0)."""
+    namespace = f"odoo-{tenant_id}"
+    from k8s_utils.client import scale_deployment
+    try:
+        scale_deployment(namespace, "odoo", 0)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"status": "suspended"}
+
+@router.post("/{tenant_id}/start")
+def start_instance(tenant_id: str):
+    """Resume a tenant instance (scale to 1)."""
+    namespace = f"odoo-{tenant_id}"
+    from k8s_utils.client import scale_deployment
+    try:
+        scale_deployment(namespace, "odoo", 1)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"status": "starting"}
+
+
+class ConfigUpdateRequest(BaseModel):
+    odoo_conf: str = None
+    addons_repos: list = None
+
+@router.get("/{tenant_id}/config")
+def get_instance_config(tenant_id: str):
+    namespace = f"odoo-{tenant_id}"
+    from k8s_utils.client import read_namespaced_config_map
+    try:
+        data = read_namespaced_config_map(namespace, "odoo-conf")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    
+    import json
+    addons = []
+    if "addons.json" in data:
+        try:
+            addons = json.loads(data["addons.json"])
+        except:
+            pass
+    return {"odoo_conf": data.get("odoo.conf", ""), "addons_repos": addons}
+
+@router.put("/{tenant_id}/config")
+def update_instance_config(tenant_id: str, req: ConfigUpdateRequest):
+    if req.odoo_conf is None:
+        raise HTTPException(status_code=400, detail="odoo_conf is required for PUT")
+    return patch_instance_config(tenant_id, req)
+
+@router.patch("/{tenant_id}/config")
+def patch_instance_config(tenant_id: str, req: ConfigUpdateRequest):
+    namespace = f"odoo-{tenant_id}"
+    from k8s_utils.client import patch_namespaced_config_map, restart_deployment
+    import json
+    update_data = {}
+    if req.odoo_conf is not None:
+        update_data["odoo.conf"] = req.odoo_conf
+    if req.addons_repos is not None:
+        update_data["addons.json"] = json.dumps(req.addons_repos)
+        
+    if not update_data:
+        return {"status": "no change"}
+        
+    try:
+        patch_namespaced_config_map(namespace, "odoo-conf", update_data)
+        restart_deployment(namespace, "odoo")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"status": "restarting"}
+
+@router.get("/{tenant_id}/logs")
+def get_instance_logs(tenant_id: str, lines: int = 200):
+    namespace = f"odoo-{tenant_id}"
+    from k8s_utils.client import read_namespaced_pod_log
+    try:
+        logs = read_namespaced_pod_log(namespace, "app=odoo", lines)
+        return {"logs": logs}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 # ── Postgres helpers ─────────────────────────────────────────────────────────
 
@@ -176,6 +266,20 @@ def _pg_conn(dbname: str = "postgres"):
         user=_PG_ADMIN_USER,
         password=_PG_ADMIN_PASSWORD,
     )
+
+def _get_user_count(tenant_id: str) -> int:
+    """Connect directly to the tenant database to count paying users."""
+    db_name = f"odoo_{tenant_id}"
+    try:
+        conn = _pg_conn(dbname=db_name)
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM res_users WHERE share=false AND active=true")
+            count = cur.fetchone()[0]
+        conn.close()
+        return count
+    except Exception as e:
+        logger.warning("Could not fetch user count for %s: %s", tenant_id, e)
+        return 0
 
 
 def _create_pg_user(pg_user: str, password: str, db_name: str) -> None:

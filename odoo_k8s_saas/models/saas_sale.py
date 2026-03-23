@@ -141,6 +141,18 @@ class AccountMove(models.Model):
                 # Build tenant_id from partner name
                 tenant_id = self._generate_tenant_id(order.partner_id)
 
+                # ── Find subscription FIRST so we can set subscription_id at
+                # create-time.  This is CRITICAL: if subscription_id is set
+                # as part of the create() call it is flushed to the DB before
+                # _link_subscription() calls subscription.write(stage_id=…).
+                # Without this, SaleSubscription.write() searches for linked
+                # instances and finds none (ORM buffer not yet flushed) →
+                # creates a 2nd duplicate namespace → infinite loop.
+                Subscription = self.env["sale.subscription"]
+                subscription_for_order = Subscription.search([
+                    ("sale_order_id", "=", order.id),
+                ], limit=1)
+
                 instance = Instance.create({
                     "name": f"{order.partner_id.name} — {order.name}",
                     "tenant_id": tenant_id,
@@ -148,11 +160,21 @@ class AccountMove(models.Model):
                     "storage_gi": 10,
                     "partner_id": order.partner_id.id,
                     "sale_order_id": order.id,
+                    # Set subscription_id at create-time so the ORM flushes it
+                    # to the DB before the stage-advance write() fires the
+                    # SaleSubscription.write() hook below.
+                    "subscription_id": subscription_for_order.id if subscription_for_order else False,
                 })
                 logger.info(
-                    "Auto-created saas.instance %s for SO %s",
+                    "Auto-created saas.instance %s for SO %s (sub=%s)",
                     instance.tenant_id, order.name,
+                    subscription_for_order.name if subscription_for_order else "none",
                 )
+
+                # Flush instance to DB NOW so that SaleSubscription.write()
+                # can find it via search(subscription_id=…) without creating
+                # a duplicate.  This is the key fix for the infinite-loop bug.
+                self.env.flush_all()
 
                 # ── Link subscription_id + advance stage ──────────────────────
                 self._link_subscription(order, instance)
@@ -188,11 +210,15 @@ class AccountMove(models.Model):
         if not subscription:
             return
 
-        # Set subscription_id on the instance (fixes close-doesn't-stop bug)
+        # Set subscription_id on the instance (fixes close-doesn't-stop bug).
+        # NOTE: ideally this is already set at create() time (see caller above),
+        # but we keep this as a safety net for callers that don't pre-set it.
         if not instance.subscription_id:
             instance.subscription_id = subscription.id
+            # Flush immediately so the next write() hook sees the link.
+            instance.env.flush_all()
             logger.info(
-                "Linked instance %s → subscription %s",
+                "Linked instance %s → subscription %s (late-link)",
                 instance.tenant_id, subscription.name,
             )
 

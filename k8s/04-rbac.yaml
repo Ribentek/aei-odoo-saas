@@ -14,7 +14,7 @@ metadata:
   name: saas-portal-role
 rules:
   - apiGroups: [""]
-    resources: [namespaces, pods, services, configmaps, secrets, persistentvolumeclaims, limitranges, resourcequotas]
+    resources: [namespaces, pods, pods/log, services, configmaps, secrets, persistentvolumeclaims, limitranges, resourcequotas]
     verbs: [get, list, watch, create, update, patch, delete]
   - apiGroups: [apps]
     resources: [deployments]

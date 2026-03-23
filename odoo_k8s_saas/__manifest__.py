@@ -1,7 +1,7 @@
 {
     'name': 'Odoo K8s SaaS',
-    'version': '18.0.2.0.0',
-    'summary': 'SaaS management addon: provision and manage tenants via the SaaS portal API',
+    'version': '18.0.3.0.0',
+    'summary': 'SaaS management: provision tenants, view logs, edit config, sync addon repos',
     'category': 'Technical',
     'author': 'AEI Software',
     'license': 'LGPL-3',

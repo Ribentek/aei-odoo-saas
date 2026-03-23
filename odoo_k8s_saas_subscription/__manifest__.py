@@ -8,10 +8,12 @@
     'depends': ['odoo_k8s_saas', 'subscription_oca', 'portal'],
     'data': [
         'security/ir.model.access.csv',
+        'security/ir_rules.xml',
         'data/subscription_templates.xml',
         'data/ir_cron.xml',
         'views/saas_instance_views.xml',
         'views/sale_subscription_views.xml',
+        'views/subscription_template_views.xml',
         'views/subscription_portal_templates.xml',
     ],
     'installable': True,

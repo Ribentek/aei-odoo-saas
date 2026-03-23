@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- payment.method created only once (noupdate=1).
+         All required NOT NULL fields are declared explicitly. -->
+    <data noupdate="1">
+        <record id="payment_method_qr_mercantil" model="payment.method">
+            <field name="name">QR Mercantil</field>
+            <field name="code">qr_mercantil</field>
+            <field name="support_refund">none</field>
+            <field name="support_tokenization" eval="False"/>
+            <field name="support_express_checkout" eval="False"/>
+            <field name="active" eval="True"/>
+            <field name="sequence">70</field>
+        </record>
+
+        <!-- account.payment.method is the ACCOUNTING-layer record (different from
+             payment.method).  It is required so that account.payment.method.line
+             can be created on the bank journal, which is what _create_payment()
+             uses when it looks up payment_method_line_id.
+             Without this record the CRON _cron_post_process raises:
+             "Por favor, defina un método de pago en su pago." -->
+        <record id="account_payment_method_qr_mercantil_inbound" model="account.payment.method">
+            <field name="name">QR Mercantil</field>
+            <field name="code">qr_mercantil</field>
+            <field name="payment_type">inbound</field>
+        </record>
+    </data>
+
+    <!-- Provider updated on every -u (noupdate=0) so payment_method_ids is
+         always linked even when the provider record pre-existed. -->
+    <data noupdate="0">
+        <record id="payment_provider_qr_mercantil" model="payment.provider">
+            <field name="name">QR Mercantil</field>
+            <field name="code">qr_mercantil</field>
+            <field name="state">test</field>
+            <field name="is_published">True</field>
+            <field name="qr_mercantil_base_url">https://sip.mc4.com.bo:8443</field>
+            <field name="qr_mercantil_api_key">dummy</field>
+            <field name="qr_mercantil_api_key_service">dummy</field>
+            <field name="qr_mercantil_username">dummy</field>
+            <field name="qr_mercantil_password">dummy</field>
+            <field name="payment_method_ids" eval="[(4, ref('payment_method_qr_mercantil'))]"/>
+            <!-- Link the redirect form view so Odoo 18 renders #o_payment_redirect_form into the checkout DOM -->
+            <field name="redirect_form_view_id" ref="payment_qr_mercantil.qr_mercantil_redirect_form"/>
+        </record>
+    </data>
+
+</odoo>

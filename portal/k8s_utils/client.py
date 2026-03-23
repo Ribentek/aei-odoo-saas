@@ -137,3 +137,44 @@ def namespace_exists(namespace: str) -> bool:
         if e.status == 404:
             return False
         raise
+
+def read_namespaced_config_map(namespace: str, name: str) -> dict:
+    try:
+        cm = _core().read_namespaced_config_map(name=name, namespace=namespace)
+        return cm.data or {}
+    except client.exceptions.ApiException as e:
+        if e.status == 404:
+            return {}
+        raise
+
+def patch_namespaced_config_map(namespace: str, name: str, data: dict) -> None:
+    _core().patch_namespaced_config_map(name=name, namespace=namespace, body={"data": data})
+
+def read_namespaced_pod_log(namespace: str, app_label: str = "app=odoo", tail_lines: int = 200) -> str:
+    try:
+        pods = _core().list_namespaced_pod(namespace=namespace, label_selector=app_label)
+        if not pods.items:
+            return "No pods found."
+        pod_name = pods.items[0].metadata.name
+        return _core().read_namespaced_pod_log(name=pod_name, namespace=namespace, tail_lines=tail_lines)
+    except Exception as e:
+        return f"Could not fetch logs: {e}"
+
+def restart_deployment(namespace: str, name: str = "odoo") -> None:
+    from datetime import datetime, timezone
+    body = {
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "kubectl.kubernetes.io/restartedAt": datetime.now(timezone.utc).isoformat()
+                    }
+                }
+            }
+        }
+    }
+    _apps().patch_namespaced_deployment(name=name, namespace=namespace, body=body)
+
+def scale_deployment(namespace: str, name: str, replicas: int) -> None:
+    body = {"spec": {"replicas": replicas}}
+    _apps().patch_namespaced_deployment_scale(name=name, namespace=namespace, body=body)

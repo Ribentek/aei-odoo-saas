@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!--
+        Redirect form rendered by Odoo 18 into the checkout DOM via
+        payment.provider.redirect_form_view_id.
+        When the user clicks "Pagar ahora":
+          1. Odoo JS calls _processRedirectFlow()
+          2. Finds #o_payment_redirect_form in the DOM
+          3. Sets target="_top" and submits the form
+          4. Browser navigates to /payment/qr_mercantil/display?reference=...
+    -->
+    <template id="qr_mercantil_redirect_form" name="QR Mercantil - Redirect Form">
+        <form
+            id="o_payment_redirect_form"
+            action="/payment/qr_mercantil/display"
+            method="get"
+        >
+            <input type="hidden" name="reference" t-att-value="reference"/>
+        </form>
+    </template>
+
+    <!--
+        Full-page QR display shown after redirect.
+        The existing qr_mercantil_form.js (loaded in frontend assets) detects
+        the #qr_mercantil_reference element and starts polling automatically.
+    -->
+    <template id="qr_mercantil_display" name="QR Mercantil - Pantalla de Pago">
+        <t t-call="website.layout">
+            <div class="container py-5 text-center">
+
+                <!-- Demo mode banner -->
+                <t t-if="is_demo">
+                    <div class="alert alert-warning d-inline-flex align-items-center gap-2 mb-3 fw-bold" role="alert">
+                        <span>⚠️ MODO DEMO — No se realiza ningún cobro real</span>
+                    </div>
+                </t>
+
+                <h2 class="mb-1">Pago con QR Mercantil</h2>
+                <p class="text-muted mb-4">Escanea el código QR con tu app bancaria para completar el pago.</p>
+
+                <t t-if="qr_image">
+                    <!-- In demo mode the fake QR is an SVG encoded in base64 -->
+                    <t t-if="is_demo">
+                        <img
+                            t-att-src="'data:image/svg+xml;base64,' + qr_image"
+                            alt="QR Mercantil (DEMO)"
+                            class="img-fluid border rounded p-3 shadow-sm"
+                            style="max-width:280px;"
+                        />
+                    </t>
+                    <t t-else="">
+                        <img
+                            t-att-src="'data:image/png;base64,' + qr_image"
+                            alt="QR Mercantil"
+                            class="img-fluid border rounded p-3 shadow-sm"
+                            style="max-width:280px;"
+                        />
+                    </t>
+                </t>
+                <t t-else="">
+                    <div class="alert alert-warning d-inline-block mt-2">
+                        No se pudo generar el código QR.<br/>
+                        Por favor, contacta soporte o intenta de nuevo.
+                    </div>
+                </t>
+
+                <p class="mt-3 fs-5">
+                    <strong t-esc="currency"/>&#160;<strong t-esc="amount"/>
+                </p>
+                <p class="text-muted small">Este QR vence en 24 horas.</p>
+
+                <!-- Status message updated by JS polling -->
+                <div id="qr_mercantil_status_msg" class="mt-3 alert alert-info d-inline-flex align-items-center gap-2">
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"/>
+                    Esperando confirmación del banco…
+                </div>
+
+                <!-- Demo: Simulate payment button (only visible in demo mode) -->
+                <t t-if="is_demo">
+                    <div class="mt-3">
+                        <button
+                            id="qr_mercantil_simulate_btn"
+                            class="btn btn-success btn-lg"
+                            type="button"
+                        >
+                            ✅ Simular Pago (Demo)
+                        </button>
+                        <p class="text-muted small mt-1">Marca la transacción como pagada en Odoo sin cargo real.</p>
+                    </div>
+                </t>
+
+                <!-- Hidden inputs consumed by qr_mercantil_form.js -->
+                <input type="hidden" id="qr_mercantil_reference" t-att-value="reference"/>
+                <input type="hidden" id="qr_mercantil_status_url" value="/payment/qr_mercantil/status"/>
+                <input type="hidden" id="qr_mercantil_simulate_url" value="/payment/qr_mercantil/simulate"/>
+                <input type="hidden" id="qr_mercantil_landing" t-att-value="landing_route"/>
+                <input type="hidden" id="qr_mercantil_is_demo" t-att-value="'1' if is_demo else ''"/>
+
+                <!-- Pay later / copy link -->
+                <div class="mt-4 border-top pt-3">
+                    <p class="text-muted small mb-2">
+                        ¿Prefieres pagar más tarde? Guarda este enlace. El QR sigue activo por 24 horas.
+                    </p>
+                    <button
+                        id="qr_mercantil_copy_link_btn"
+                        class="btn btn-outline-secondary btn-sm"
+                        type="button"
+                        onclick="(function(btn){
+                            navigator.clipboard.writeText(window.location.href)
+                                .then(function(){
+                                    btn.textContent = '✅ Enlace copiado';
+                                    setTimeout(function(){ btn.textContent = '🔗 Copiar enlace de pago'; }, 2500);
+                                });
+                        })(this)"
+                    >
+                        🔗 Copiar enlace de pago
+                    </button>
+                    <span class="mx-2 text-muted">·</span>
+                    <a href="/shop" class="btn btn-outline-secondary btn-sm">← Volver a la tienda</a>
+                </div>
+
+            </div>
+        </t>
+    </template>
+
+</odoo>

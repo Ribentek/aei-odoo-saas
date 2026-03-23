@@ -1,0 +1,67 @@
+# k8s/07-cloudflare-tunnel.yaml
+# Cloudflare Tunnel — expone admin.aeisoftware.com → odoo-admin:8069 en k3s
+#
+# IMPORTANTE: el routing se configura en el dashboard de Cloudflare Zero Trust:
+#   Zero Trust > Networks > Tunnels > <este-tunnel> > Edit > Public Hostname
+#   Subdomain: admin | Domain: aeisoftware.com | Service: http://odoo-admin.odoo.svc.cluster.local:8069
+#
+# Aplicar: kubectl apply -f k8s/07-cloudflare-tunnel.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudflare
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflared-token
+  namespace: cloudflare
+type: Opaque
+stringData:
+  TUNNEL_TOKEN: "eyJhIjoiMjc1NWI0MWI4MTFkYzlhZmM3Mzk2ZWQ1ZDFlMjc2NDQiLCJ0IjoiMzgyOWEyMDYtZjdlZC00ZTZhLWI3NWQtOTU0NDQ0ZWFhNGE0IiwicyI6Ik1tUXpOelpsWWpjdFpEVmtaUzAwTlRKbExXSTNOemt0TldZME9Ea3daREU1TUdSbCJ9"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: cloudflare
+  labels:
+    app: cloudflared
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          args:
+            - tunnel
+            - --no-autoupdate
+            - run
+            - --token
+            - $(TUNNEL_TOKEN)
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-token
+                  key: TUNNEL_TOKEN
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          # Sin probes — igual que el docker-compose que funciona.
+          # k8s reinicia el pod automáticamente si el proceso muere.
+      restartPolicy: Always
