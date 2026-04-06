@@ -17,7 +17,7 @@ metadata:
   namespace: odoo-admin
 spec:
   accessModes: [ReadWriteOnce]
-  storageClassName: local-path
+  storageClassName: ceph-rbd
   resources:
     requests:
       storage: 20Gi
