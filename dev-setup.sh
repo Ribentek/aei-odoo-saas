@@ -37,15 +37,14 @@ if ! docker ps &>/dev/null; then
 fi
 
 # ── 0.5. Configure /etc/hosts for local dev (same domains as production) ─────
+NODE_IP=$(hostname -I | awk '{print $1}')
 DEV_HOSTS=("admin.aeisoftware.com" "www.aeisoftware.com" "portal.aeisoftware.com")
-info "Ensuring /etc/hosts has local entries for: ${DEV_HOSTS[*]}"
+info "Ensuring /etc/hosts points to K3s node ($NODE_IP) for: ${DEV_HOSTS[*]}"
 for h in "${DEV_HOSTS[@]}"; do
-  if ! grep -q "$h" /etc/hosts; then
-    echo "127.0.0.1   $h" | sudo tee -a /etc/hosts > /dev/null
-    info "  Added: 127.0.0.1 → $h"
-  else
-    info "  Already present: $h"
-  fi
+  # Remove any stale entry, then add with current node IP
+  sudo sed -i "/$h/d" /etc/hosts
+  echo "$NODE_IP   $h" | sudo tee -a /etc/hosts > /dev/null
+  info "  Set: $NODE_IP → $h"
 done
 
 # ── 1. Install K3s ───────────────────────────────────────────────────────────
