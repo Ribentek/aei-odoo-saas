@@ -214,7 +214,7 @@ metadata:
   namespace: odoo-admin
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web
-    traefik.ingress.kubernetes.io/router.middlewares: kube-system-odoo-headers@kubernetescrd,kube-system-odoo-compress@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: odoo-admin-odoo-headers@kubernetescrd,odoo-admin-odoo-buffering@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:

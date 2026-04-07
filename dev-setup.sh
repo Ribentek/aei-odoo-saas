@@ -122,6 +122,10 @@ kubectl apply -f "$K8S_DIR/02-postgres.yaml"
 info "Applying RBAC …"
 kubectl apply -f "$K8S_DIR/04-rbac.yaml"
 
+# ── 6.5. Apply Traefik Middlewares ───────────────────────────────────────────
+info "Applying Traefik Middlewares (Odoo headers & buffers) …"
+kubectl apply -f "$K8S_DIR/03-traefik-middlewares.yaml"
+
 # ── 7. Apply Portal (patched to use local image) ─────────────────────────────
 info "Applying portal (local image, imagePullPolicy=Never) …"
 kubectl apply -f "$K8S_DIR/05-portal.yaml"

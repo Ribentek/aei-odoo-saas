@@ -1,0 +1,48 @@
+# =============================================================================
+# k8s/03-traefik-middlewares.yaml
+# Middlewares globales para Odoo (Headers de seguridad proxy, Buffering)
+# =============================================================================
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: odoo-headers
+  namespace: aeisoftware
+spec:
+  headers:
+    # Fuerza paso cabeceras X-Forwarded originarias de Cloudflare
+    customRequestHeaders:
+      X-Forwarded-Proto: "https"
+    # Prevención XSS y control base de iframes
+    browserXssFilter: true
+    contentTypeNosniff: true
+    forceSTSHeader: true
+    stsIncludeSubdomains: true
+    stsSeconds: 31536000
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: odoo-headers
+  namespace: odoo-admin
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Proto: "https"
+    browserXssFilter: true
+    contentTypeNosniff: true
+    forceSTSHeader: true
+    stsIncludeSubdomains: true
+    stsSeconds: 31536000
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: odoo-buffering
+  namespace: odoo-admin
+spec:
+  buffering:
+    maxRequestBodyBytes: 104857600  # 100 MB para evitar cortes de carga multimedia/Restore DB
+    memRequestBodyBytes: 2097152    # 2 MB de tramas en memoria antes de bajar a disco
+    maxResponseBodyBytes: 104857600 # 100 MB para envíos fluidos de videos o binarios pesados
+    memResponseBodyBytes: 2097152
+    retryExpression: "IsNetworkError() || HttpStatus(502, 504)"
