@@ -36,6 +36,18 @@ if ! docker ps &>/dev/null; then
   error "Cannot access Docker daemon. Ensure you are in the docker group or run: sudo chmod 666 /var/run/docker.sock"
 fi
 
+# ── 0.5. Configure /etc/hosts for local dev (same domains as production) ─────
+DEV_HOSTS=("admin.aeisoftware.com" "www.aeisoftware.com" "portal.aeisoftware.com")
+info "Ensuring /etc/hosts has local entries for: ${DEV_HOSTS[*]}"
+for h in "${DEV_HOSTS[@]}"; do
+  if ! grep -q "$h" /etc/hosts; then
+    echo "127.0.0.1   $h" | sudo tee -a /etc/hosts > /dev/null
+    info "  Added: 127.0.0.1 → $h"
+  else
+    info "  Already present: $h"
+  fi
+done
+
 # ── 1. Install K3s ───────────────────────────────────────────────────────────
 if ! command -v k3s &>/dev/null; then
   info "Installing K3s …"
