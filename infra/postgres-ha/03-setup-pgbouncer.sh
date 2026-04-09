@@ -107,10 +107,15 @@ listen_port = 6432
 unix_socket_dir = /var/run/pgbouncer
 
 ;; ─── Autenticación ─────────────────────────────────────────────
-;; FIX: usar md5 — compatible con plain text passwords en userlist.txt
-;; scram-sha-256 requiere hash SCRAM completo en userlist.txt (no plain text)
+;; auth_type md5 — compatible con plain text en userlist.txt
+;; auth_user + auth_query permiten autenticar cualquier rol de PG
+;; de forma dinámica sin modificar userlist.txt.
+;; pgbouncer.user_lookup() es SECURITY DEFINER (corre como postgres)
+;; para poder leer pg_shadow sin privilegios de superusuario.
 auth_type = md5
 auth_file = /etc/pgbouncer/userlist.txt
+auth_user = odoo
+auth_query = SELECT uname, phash FROM pgbouncer.user_lookup($1)
 
 ;; ─── Pool Mode ─────────────────────────────────────────────────
 pool_mode = transaction
@@ -214,6 +219,7 @@ echo ""
 echo "══════════════════════════════════════════════════"
 echo "  ✅ PgBouncer configurado"
 echo "  Puerto: 6432 (transaction pooling)"
-echo "  Auth:   md5"
+echo "  Auth:   md5 + auth_query via pgbouncer.user_lookup()"
+echo "  auth_user: odoo (roles dinámicos sin modificar userlist.txt)"
 echo "  Max clientes: 3000 → 150 conexiones a PG"
 echo "══════════════════════════════════════════════════"

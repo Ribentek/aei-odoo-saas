@@ -73,9 +73,11 @@ spec:
             - name: BASE_DOMAIN
               value: aeisoftware.com
             - name: STORAGE_CLASS
-              value: local-path          # dev: local-path | prod: ceph-rbd
+              value: ceph-rbd              # dev: local-path | prod: ceph-rbd
             - name: ODOO_HEADERS_MIDDLEWARE
               value: aeisoftware-odoo-headers@kubernetescrd
+            - name: URL_SCHEME
+              value: https
           readinessProbe:
             httpGet:
               path: /healthz
