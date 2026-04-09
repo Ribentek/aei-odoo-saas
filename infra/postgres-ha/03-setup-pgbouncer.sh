@@ -54,7 +54,7 @@ BEGIN
 END;
 \$\$;
 
--- Schema y función de autenticación para PgBouncer
+-- Schema y función de autenticación para PgBouncer (en postgres)
 CREATE SCHEMA IF NOT EXISTS pgbouncer;
 DROP FUNCTION IF EXISTS pgbouncer.user_lookup(text);
 CREATE OR REPLACE FUNCTION pgbouncer.user_lookup(in i_username text,
@@ -70,19 +70,51 @@ END;
 GRANT USAGE ON SCHEMA pgbouncer TO odoo;
 GRANT EXECUTE ON FUNCTION pgbouncer.user_lookup(text) TO odoo;
 SQL
-  echo "  Usuarios y schema configurados"
+
+  # ─── CRITICAL: Crear la función en template1 ──────────────────────────────
+  # PgBouncer ejecuta auth_query contra la BD TARGET, no contra 'postgres'.
+  # Al crear la función en template1, todas las BDs nuevas la heredan.
+  echo "  → Creando pgbouncer.user_lookup() en template1..."
+  psql -h 127.0.0.1 -p 5432 -U postgres -d template1 <<TMPL_SQL
+CREATE SCHEMA IF NOT EXISTS pgbouncer;
+CREATE OR REPLACE FUNCTION pgbouncer.user_lookup(in i_username text,
+  out uname text, out phash text)
+RETURNS record AS \$\$
+BEGIN
+  SELECT usename, passwd FROM pg_catalog.pg_shadow
+  WHERE usename = i_username INTO uname, phash;
+  RETURN;
+END;
+\$\$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT USAGE ON SCHEMA pgbouncer TO odoo;
+GRANT EXECUTE ON FUNCTION pgbouncer.user_lookup(text) TO odoo;
+TMPL_SQL
+  echo "  Usuarios, schema y template1 configurados"
 else
   echo "  Replica — usuarios se replicarán desde primary"
 fi
 
-# ─── Generar userlist.txt con hash MD5 ──────────────────────────────────────
-# FIX: auth_type=md5 funciona con plain text en userlist.txt en PgBouncer 1.25
-# scram-sha-256 en userlist.txt requiere el hash SCRAM completo, no plain text
+# ─── Generar userlist.txt con SCRAM hashes ──────────────────────────────────
+# auth_type=scram-sha-256 requiere hashes SCRAM en userlist.txt.
+# Leemos los hashes directamente de pg_shadow en el primary.
 echo "→ Creando userlist.txt..."
 
+if [ "$IS_PRIMARY" = "t" ]; then
+  ODOO_HASH=$(psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+    "SELECT passwd FROM pg_shadow WHERE usename='odoo'")
+  PG_HASH=$(psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc \
+    "SELECT passwd FROM pg_shadow WHERE usename='postgres'")
+else
+  # En réplicas, los hashes se copian del primary durante el setup
+  # Si aún no están disponibles, usar plain text temporalmente
+  ODOO_HASH="${DB_PASSWORD}"
+  PG_HASH="${PG_SUPERUSER_PASSWORD}"
+fi
+
 cat > /etc/pgbouncer/userlist.txt <<EOF
-"odoo" "${DB_PASSWORD}"
-"postgres" "${PG_SUPERUSER_PASSWORD}"
+"odoo" "${ODOO_HASH}"
+"postgres" "${PG_HASH}"
 EOF
 
 chmod 640 /etc/pgbouncer/userlist.txt
@@ -96,8 +128,10 @@ cat > /etc/pgbouncer/pgbouncer.ini <<'PGBOUNCER'
 ;; Mode: Transaction pooling
 
 [databases]
-;; Wildcard: cualquier DB conecta al PostgreSQL local
-* = host=127.0.0.1 port=5432
+;; Wildcard: PgBouncer conecta via HAProxy al primary actual.
+;; port=5000 es HAProxy primary — HA-safe, sigue failovers de Patroni.
+;; Cada nodo tiene HAProxy local → no hay punto único de falla.
+* = host=127.0.0.1 port=5000
 
 [pgbouncer]
 ;; ─── Conexión ──────────────────────────────────────────────────
@@ -107,12 +141,13 @@ listen_port = 6432
 unix_socket_dir = /var/run/pgbouncer
 
 ;; ─── Autenticación ─────────────────────────────────────────────
-;; auth_type md5 — compatible con plain text en userlist.txt
-;; auth_user + auth_query permiten autenticar cualquier rol de PG
-;; de forma dinámica sin modificar userlist.txt.
-;; pgbouncer.user_lookup() es SECURITY DEFINER (corre como postgres)
+;; auth_type scram-sha-256 — obligatorio con PG16+ (password_encryption=scram-sha-256)
+;; userlist.txt debe contener hashes SCRAM (no plain text).
+;; auth_user + auth_query autentican roles dinámicamente sin modificar userlist.txt.
+;; pgbouncer.user_lookup() es SECURITY DEFINER (owned by postgres)
 ;; para poder leer pg_shadow sin privilegios de superusuario.
-auth_type = md5
+;; NOTA: La función DEBE existir en cada BD target (se hereda de template1).
+auth_type = scram-sha-256
 auth_file = /etc/pgbouncer/userlist.txt
 auth_user = odoo
 auth_query = SELECT uname, phash FROM pgbouncer.user_lookup($1)
@@ -219,7 +254,9 @@ echo ""
 echo "══════════════════════════════════════════════════"
 echo "  ✅ PgBouncer configurado"
 echo "  Puerto: 6432 (transaction pooling)"
-echo "  Auth:   md5 + auth_query via pgbouncer.user_lookup()"
+echo "  Auth:   scram-sha-256 + auth_query via pgbouncer.user_lookup()"
+echo "  Backend: HAProxy:5000 (primary, HA-safe)"
 echo "  auth_user: odoo (roles dinámicos sin modificar userlist.txt)"
+echo "  template1: pgbouncer.user_lookup() heredada por nuevas BDs"
 echo "  Max clientes: 3000 → 150 conexiones a PG"
 echo "══════════════════════════════════════════════════"
