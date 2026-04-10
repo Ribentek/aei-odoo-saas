@@ -28,3 +28,4 @@ infra/postgres-ha/.secrets.generated
 .idea/
 .vscode/
 *.swp
+backups/
