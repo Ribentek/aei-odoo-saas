@@ -486,3 +486,91 @@ class SaleSubscription(models.Model):
                     "_cron_sync_user_count: failed for %s", inst.tenant_id
                 )
 
+    @api.model
+    def _cron_update_extra_user_line(self):
+        """Daily cron: update subscription line qty for extra users.
+
+        For each active SaaS subscription:
+        - If extra_users > 0: create or update an "Extra User" line
+          with qty = extra_users and price = template.price_per_extra_user
+        - If extra_users <= 0: remove any existing "Extra User" line
+
+        This runs daily, ensuring the subscription line reflects the current
+        user count before OCA's invoicing cron generates the monthly invoice.
+        """
+        stage_in_progress = self.env.ref(_STAGE_IN_PROGRESS, raise_if_not_found=False)
+        if not stage_in_progress:
+            logger.warning(
+                "_cron_update_extra_user_line: stage '%s' not found — skipping.",
+                _STAGE_IN_PROGRESS,
+            )
+            return
+
+        active_subs = self.search([
+            ("stage_id", "=", stage_in_progress.id),
+            ("template_id.is_saas_plan", "=", True),
+        ])
+
+        extra_user_product = self.env.ref(
+            "odoo_k8s_saas_subscription.product_extra_user",
+            raise_if_not_found=False,
+        )
+        if not extra_user_product:
+            logger.error(
+                "_cron_update_extra_user_line: missing product "
+                "'product_extra_user' — cannot bill extra users."
+            )
+            return
+
+        logger.info(
+            "_cron_update_extra_user_line: processing %d active subscriptions",
+            len(active_subs),
+        )
+
+        for sub in active_subs:
+            extra = sub.extra_users  # computed field
+            existing_line = sub.sale_subscription_line_ids.filtered(
+                lambda l: l.product_id == extra_user_product
+            )
+
+            if extra <= 0:
+                # No extra users — remove the billing line if present
+                if existing_line:
+                    existing_line.unlink()
+                    logger.info(
+                        "_cron_update_extra_user_line: removed extra-user line "
+                        "from subscription %s (no extra users)",
+                        sub.display_name,
+                    )
+                continue
+
+            price = sub.template_id.price_per_extra_user
+
+            if existing_line:
+                # Update qty/price only if changed
+                if existing_line.product_uom_qty != extra or existing_line.price_unit != price:
+                    existing_line.write({
+                        "product_uom_qty": extra,
+                        "price_unit": price,
+                        "name": f"Extra Users ({extra} × {price} Bs./user/month)",
+                    })
+                    logger.info(
+                        "_cron_update_extra_user_line: updated %s → %d extra users "
+                        "× %.2f Bs.",
+                        sub.display_name, extra, price,
+                    )
+            else:
+                # Create new extra-user line
+                self.env["sale.subscription.line"].create({
+                    "subscription_id": sub.id,
+                    "product_id": extra_user_product.id,
+                    "name": f"Extra Users ({extra} × {price} Bs./user/month)",
+                    "product_uom_qty": extra,
+                    "price_unit": price,
+                })
+                logger.info(
+                    "_cron_update_extra_user_line: created extra-user line for "
+                    "%s → %d extra users × %.2f Bs.",
+                    sub.display_name, extra, price,
+                )
+

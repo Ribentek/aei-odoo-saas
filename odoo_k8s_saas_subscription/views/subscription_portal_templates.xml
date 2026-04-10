@@ -406,6 +406,36 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Estimated next invoice (shows when extra users exist) -->
+                <div t-if="subscription.extra_users > 0" class="alert alert-warning mt-3 mb-0">
+                    <div class="row align-items-center">
+                        <div class="col-12 col-md-8">
+                            <i class="fa fa-exclamation-triangle me-1"/>
+                            <strong>You have <t t-esc="subscription.extra_users"/> user(s) beyond your plan.</strong>
+                            <br/>
+                            <small class="text-muted">
+                                Extra charge:
+                                <t t-esc="subscription.extra_users"/> users ×
+                                <span t-field="subscription.template_id.price_per_extra_user"
+                                      t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                                /user/month =
+                                <strong>
+                                    <span t-field="subscription.extra_users_amount"
+                                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                                </strong>
+                            </small>
+                        </div>
+                        <div class="col-12 col-md-4 text-md-end mt-2 mt-md-0">
+                            <small class="text-muted">Estimated next invoice:</small><br/>
+                            <strong class="fs-5">
+                                <t t-set="estimated_total" t-value="subscription.recurring_total + subscription.extra_users_amount"/>
+                                <t t-esc="'%.2f' % estimated_total"/>
+                                <t t-esc="subscription.currency_id.symbol"/>
+                            </strong>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Chatter / Communication -->

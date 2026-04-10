@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- ── Product used as the subscription line for extra users ──────
+             This product is NOT sold via e-commerce (sale_ok=False).
+             It is created/updated automatically by the cron
+             _cron_update_extra_user_line when a subscription exceeds
+             the included_users limit of its template.
+             
+             price_unit is set dynamically from template.price_per_extra_user.
+        -->
+        <record id="product_extra_user" model="product.product">
+            <field name="name">Extra User (Monthly)</field>
+            <field name="type">service</field>
+            <field name="list_price">0.0</field>
+            <field name="sale_ok" eval="False"/>
+            <field name="purchase_ok" eval="False"/>
+            <field name="website_published" eval="False"/>
+            <field name="description_sale">Additional active users beyond the plan's included amount. Billed monthly.</field>
+        </record>
+    </data>
+</odoo>
