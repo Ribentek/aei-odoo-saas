@@ -42,7 +42,7 @@
     <field name="name">saas.instance.tree</field>
     <field name="model">saas.instance</field>
     <field name="arch" type="xml">
-      <list decoration-success="state == 'ready'" decoration-warning="state in ('provisioning', 'suspended')" decoration-muted="state in ('draft', 'deleted')">
+      <list decoration-success="state == 'ready'" decoration-warning="state in ('provisioning', 'suspended')" decoration-muted="state in ('draft', 'deleted', 'pending_delete')">
         <field name="name"/>
 
         <field name="tenant_id"/>
@@ -51,7 +51,7 @@
                decoration-success="state == 'ready'"
                decoration-warning="state == 'provisioning'"
                decoration-danger="state == 'error'"
-               decoration-muted="state in ('draft', 'deleted')"/>
+               decoration-muted="state in ('draft', 'deleted', 'pending_delete')"/>
         <field name="url" widget="url"/>
         <field name="partner_id" optional="show"/>
       </list>
@@ -81,7 +81,7 @@
                   invisible="state != 'suspended'"/>
           <button name="action_delete" type="object" string="Delete Instance"
                   class="btn-danger"
-                  invisible="state in ('draft', 'deleted')"/>
+                  invisible="state in ('draft', 'deleted', 'pending_delete')"/>
           <button name="action_send_credentials_email" type="object" string="✉️ Resend Credentials"
                   class="btn-secondary"
                   invisible="state != 'ready'"/>
@@ -104,6 +104,7 @@
           <widget name="web_ribbon" title="Error" bg_color="text-bg-danger" invisible="state != 'error'"/>
           <widget name="web_ribbon" title="Provisioning" bg_color="text-bg-warning" invisible="state != 'provisioning'"/>
           <widget name="web_ribbon" title="Suspended" bg_color="text-bg-warning" invisible="state != 'suspended'"/>
+          <widget name="web_ribbon" title="Deleting..." bg_color="text-bg-dark" invisible="state != 'pending_delete'"/>
           <widget name="web_ribbon" title="Deleted" bg_color="text-bg-secondary" invisible="state != 'deleted'"/>
 
           <div class="oe_title">
@@ -150,7 +151,7 @@
             </page>
 
             <page string="📜 Logs" name="logs_page"
-                  invisible="state in ('draft', 'deleted')">
+                  invisible="state in ('draft', 'deleted', 'pending_delete')">
               <group>
                 <button name="action_fetch_logs" type="object"
                         string="⟳ Refresh Logs" class="btn-secondary"/>

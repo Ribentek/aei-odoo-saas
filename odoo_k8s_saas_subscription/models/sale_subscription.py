@@ -345,22 +345,17 @@ class SaleSubscription(models.Model):
                             inst.tenant_id, rec.display_name,
                         )
 
-            # → Closed: delete all non-deleted instances (incl. suspended)
+            # → Closed: mark all non-deleted instances for async deletion
             elif stage_closed and new_stage_id == stage_closed.id:
-                for inst in instances.filtered(
+                to_delete = instances.filtered(
                     lambda i: i.state in ("draft", "provisioning", "ready", "suspended")
-                ):
+                )
+                if to_delete:
                     logger.info(
-                        "Subscription %s → Closed: deleting instance %s (state=%s)",
-                        rec.display_name, inst.tenant_id, inst.state,
+                        "Subscription %s → Closed: marking %d instance(s) for async deletion",
+                        rec.display_name, len(to_delete),
                     )
-                    try:
-                        inst.action_delete()
-                    except Exception:
-                        logger.exception(
-                            "Failed to delete %s from subscription %s",
-                            inst.tenant_id, rec.display_name,
-                        )
+                    to_delete.action_request_delete()
 
         return res
 
@@ -445,21 +440,15 @@ class SaleSubscription(models.Model):
         for sub in closed_subs:
             instances = self.env["saas.instance"].search([
                 ("subscription_id", "=", sub.id),
-                ("state", "not in", ["deleted"]),
+                ("state", "not in", ["deleted", "pending_delete"]),
             ])
-            for inst in instances:
+            if instances:
                 logger.warning(
-                    "_cron_sync_closed: active instance %s (state=%s) found on "
-                    "closed subscription %s — deleting now.",
-                    inst.tenant_id, inst.state, sub.display_name,
+                    "_cron_sync_closed: %d active instance(s) found on "
+                    "closed subscription %s — marking for deletion.",
+                    len(instances), sub.display_name,
                 )
-                try:
-                    inst.action_delete()
-                except Exception:
-                    logger.exception(
-                        "_cron_sync_closed: failed to delete instance %s",
-                        inst.tenant_id,
-                    )
+                instances.action_request_delete()
 
     @api.model
     def _cron_sync_user_count(self):
