@@ -52,6 +52,8 @@ data:
     max_cron_threads = 1
     gevent_port = 8072
     proxy_mode = True
+    limit_time_cpu = 1200
+    limit_time_real = 2400
 
 ---
 apiVersion: apps/v1

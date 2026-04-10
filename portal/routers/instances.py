@@ -292,12 +292,23 @@ def _pg_admin_conn(dbname: str = "postgres"):
     )
 
 def _get_user_count(tenant_id: str) -> int:
-    """Connect directly to the tenant database to count paying users."""
+    """Connect directly to the tenant database to count paying users.
+
+    Excludes system/technical users that should not be billed:
+    - __system__: Odoo internal system user (UID 1)
+    - share=true: portal/external users
+    - active=false: deactivated users
+    """
     db_name = f"odoo_{tenant_id}"
     try:
         conn = _pg_conn(dbname=db_name)
         with conn.cursor() as cur:
-            cur.execute("SELECT count(*) FROM res_users WHERE share=false AND active=true")
+            cur.execute("""
+                SELECT count(*) FROM res_users
+                WHERE share = false
+                  AND active = true
+                  AND login NOT IN ('__system__')
+            """)
             count = cur.fetchone()[0]
         conn.close()
         return count

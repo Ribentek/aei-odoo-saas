@@ -45,17 +45,5 @@
     <field name="interval_type">days</field>
     <field name="active">True</field>
   </record>
-
-  <!-- Daily: update extra-user billing lines before invoicing.
-       Must run AFTER ir_cron_sync_user_count so user counts are fresh. -->
-  <record id="ir_cron_update_extra_user_line" model="ir.cron">
-    <field name="name">SaaS: Update Extra User Billing Line</field>
-    <field name="model_id" ref="subscription_oca.model_sale_subscription"/>
-    <field name="state">code</field>
-    <field name="code">model._cron_update_extra_user_line()</field>
-    <field name="interval_number">1</field>
-    <field name="interval_type">days</field>
-    <field name="active">True</field>
-  </record>
 </odoo>
 

@@ -325,6 +325,23 @@
                     </div>
                 </div>
 
+                <!-- Estimated Next Invoice (shown only when extra users generate charges) -->
+                <div t-if="subscription.extra_users_amount"
+                     class="alert alert-info mt-3" id="estimated_next_invoice">
+                    <i class="fa fa-calculator me-1"/>
+                    <strong>Estimated Next Invoice:</strong>
+                    <span t-field="subscription.recurring_total"
+                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                    +
+                    <span t-field="subscription.extra_users_amount"
+                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                    (extra users) =
+                    <strong>
+                        <t t-esc="'%.2f' % (subscription.recurring_total + subscription.extra_users_amount)"/>
+                        <t t-esc="subscription.currency_id.symbol or 'Bs.'"/>
+                    </strong>
+                </div>
+
                 <!-- Line items table -->
                 <div id="item_details">
                     <table class="table table-sm mt-4" id="subscription_lines_table">
