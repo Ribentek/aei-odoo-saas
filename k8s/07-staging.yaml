@@ -42,7 +42,7 @@ metadata:
   namespace: staging
 spec:
   accessModes: [ReadWriteOnce]
-  storageClassName: local-path
+  storageClassName: ceph-rbd
   resources:
     requests:
       storage: 5Gi
