@@ -2,9 +2,9 @@ name: CI — K3s HA Stack
 
 on:
   push:
-    branches: [main, "feature/*"]
+    branches: [main, "18.0", "feature/*"]
   pull_request:
-    branches: [main, "feature/*"]
+    branches: [main, "18.0", "feature/*"]
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -49,3 +49,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # On 18.0 branch, also tag as :stable for production clarity
+      - name: Tag stable for production
+        if: github.event_name == 'push' && github.ref == 'refs/heads/18.0'
+        uses: docker/build-push-action@v6
+        with:
+          context: portal
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/odoo-saas-mvp/portal:stable
+          cache-from: type=gha

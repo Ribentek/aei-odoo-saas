@@ -1,0 +1,384 @@
+---
+# ============================================================================
+# 07-staging.yaml — Staging environment for Odoo SaaS platform
+#
+# Deploys a staging copy of both Portal (FastAPI) and Odoo Admin in a
+# dedicated "staging" namespace. Uses the "main" branch, while production
+# uses "18.0".
+#
+# Prerequisites:
+#   1. Secrets must be created separately (see infra/apply-manifests.sh)
+#   2. The ClusterRoleBinding must include the staging SA (see bottom)
+# ============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    managed-by: manual
+    environment: staging
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+# NOTE: Staging secrets are NOT defined here.
+# Apply them manually BEFORE deploying:
+#
+#   kubectl -n staging create secret generic postgres-secret \
+#     --from-literal=POSTGRES_PASSWORD=<same-as-prod>
+#
+#   kubectl -n staging create secret generic portal-secret \
+#     --from-literal=API_KEY=<staging-api-key>
+#
+#   kubectl -n staging create secret generic odoo-stg-secret \
+#     --from-literal=DB_PASSWORD=<same-as-prod> \
+#     --from-literal=ADMIN_PASSWD=<staging-admin-password>
+
+---
+# ── PVC for staging Odoo data ───────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: odoo-stg-data
+  namespace: staging
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# ── ConfigMap: Odoo staging config ──────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odoo-stg-conf
+  namespace: staging
+data:
+  addon-git-branch: "main"
+  odoo.conf.tmpl: |
+    [options]
+    db_host = postgres.aeisoftware.svc.cluster.local
+    db_port = 5002
+    db_user = odoo
+    db_password = REPLACE_DB_PASSWORD
+    admin_passwd = REPLACE_ADMIN_PASSWD
+    dbfilter = ^staging$
+    list_db = True
+    addons_path = /mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons
+    data_dir = /var/lib/odoo
+    workers = 2
+    max_cron_threads = 1
+    gevent_port = 8072
+    proxy_mode = True
+    limit_time_cpu = 1200
+    limit_time_real = 2400
+
+---
+# ── Deployment: Odoo staging (e-commerce + subscriptions) ───────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odoo-stg
+  namespace: staging
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: odoo-stg
+  template:
+    metadata:
+      labels:
+        app: odoo-stg
+    spec:
+      initContainers:
+        # 1. Clone addons from "main" branch
+        - name: copy-addon
+          image: alpine/git
+          imagePullPolicy: Always
+          env:
+            - name: ADDON_GIT_BRANCH
+              valueFrom:
+                configMapKeyRef:
+                  name: odoo-stg-conf
+                  key: addon-git-branch
+          command:
+            - sh
+            - -c
+            - |
+              echo "==> [STAGING] Cloning branch: $ADDON_GIT_BRANCH"
+              git clone --depth=1 -b "$ADDON_GIT_BRANCH" https://github.com/jpvargassoruco/odoo-saas-mvp.git /tmp/repo
+              cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
+              cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
+              cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/
+              # OCA subscription
+              git clone --depth=1 -b 18.0 https://github.com/jpvargassoruco/odoo18-oca-contract.git /tmp/oca-contract
+              cp -r /tmp/oca-contract/subscription_oca /mnt/extra-addons/
+              # MUK modules
+              git clone --depth=1 -b 19.0 https://github.com/muk-it/muk_base.git /tmp/muk-base
+              for d in /tmp/muk-base/muk_*/; do
+                cp -r "$d" /mnt/extra-addons/
+              done
+              echo "All staging addons copied OK"
+              ls -la /mnt/extra-addons/
+          volumeMounts:
+            - name: odoo-addons
+              mountPath: /mnt/extra-addons
+
+        # 2. Render config: inject secrets into odoo.conf
+        - name: render-config
+          image: alpine:3.19
+          command:
+            - sh
+            - -c
+            - |
+              sed -e "s|REPLACE_DB_PASSWORD|${DB_PASSWORD}|g" \
+                  -e "s|REPLACE_ADMIN_PASSWD|${ADMIN_PASSWD}|g" \
+                  /tmpl/odoo.conf.tmpl > /etc/odoo/odoo.conf
+              echo "Staging odoo.conf rendered"
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odoo-stg-secret
+                  key: DB_PASSWORD
+            - name: ADMIN_PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: odoo-stg-secret
+                  key: ADMIN_PASSWD
+          volumeMounts:
+            - name: odoo-conf-tmpl
+              mountPath: /tmpl
+            - name: odoo-conf-rendered
+              mountPath: /etc/odoo
+
+      containers:
+        - name: odoo
+          image: odoo:18
+          ports:
+            - containerPort: 8069
+            - containerPort: 8072
+          env:
+            - name: SAAS_PORTAL_URL
+              value: "http://portal-stg.staging.svc.cluster.local:8000"
+            - name: SAAS_PORTAL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: portal-secret
+                  key: API_KEY
+                  optional: true
+          volumeMounts:
+            - name: odoo-conf-rendered
+              mountPath: /etc/odoo
+            - name: odoo-data
+              mountPath: /var/lib/odoo
+            - name: odoo-addons
+              mountPath: /mnt/extra-addons
+          readinessProbe:
+            tcpSocket:
+              port: 8069
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 2Gi
+      volumes:
+        - name: odoo-conf-tmpl
+          configMap:
+            name: odoo-stg-conf
+        - name: odoo-conf-rendered
+          emptyDir: {}
+        - name: odoo-data
+          persistentVolumeClaim:
+            claimName: odoo-stg-data
+        - name: odoo-addons
+          emptyDir: {}
+
+---
+# ── Service: Odoo staging ──────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: odoo-stg-svc
+  namespace: staging
+spec:
+  selector:
+    app: odoo-stg
+  ports:
+    - name: http
+      port: 8069
+      targetPort: 8069
+    - name: longpoll
+      port: 8072
+      targetPort: 8072
+
+---
+# ── Ingress: Odoo staging → staging.aeisoftware.com ────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: odoo-stg-ingress
+  namespace: staging
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: staging.aeisoftware.com
+      http:
+        paths:
+          - path: /websocket
+            pathType: Prefix
+            backend:
+              service:
+                name: odoo-stg-svc
+                port:
+                  number: 8072
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: odoo-stg-svc
+                port:
+                  number: 8069
+
+---
+# ── ServiceAccount for staging portal ──────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: saas-portal
+  namespace: staging
+
+---
+# ── Deployment: Portal staging (FastAPI) ───────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portal-stg
+  namespace: staging
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: portal-stg
+  template:
+    metadata:
+      labels:
+        app: portal-stg
+    spec:
+      serviceAccountName: saas-portal
+      containers:
+        - name: portal
+          image: ghcr.io/jpvargassoruco/odoo-saas-mvp/portal:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: POSTGRES_HOST
+              value: postgres.aeisoftware.svc.cluster.local
+            - name: POSTGRES_PORT
+              value: "5002"
+            - name: POSTGRES_PORT_PRIMARY
+              value: "5000"
+            - name: POSTGRES_ADMIN_USER
+              value: odoo
+            - name: POSTGRES_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: portal-secret
+                  key: API_KEY
+            - name: BASE_DOMAIN
+              value: aeisoftware.com
+            - name: STORAGE_CLASS
+              value: local-path
+            - name: URL_SCHEME
+              value: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+---
+# ── Service: Portal staging ────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: portal-stg
+  namespace: staging
+spec:
+  selector:
+    app: portal-stg
+  ports:
+    - port: 8000
+      targetPort: 8000
+
+---
+# ── Ingress: Portal staging → portal-stg.aeisoftware.com ──────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portal-stg-ingress
+  namespace: staging
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: portal-stg.aeisoftware.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: portal-stg
+                port:
+                  number: 8000
+
+---
+# ── RBAC: Allow staging portal to manage K8s resources ─────────────────────
+# Extends the existing ClusterRoleBinding to include the staging SA.
+# This REPLACES the existing binding — applies BOTH subjects.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: saas-portal-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: saas-portal-role
+subjects:
+  - kind: ServiceAccount
+    name: saas-portal
+    namespace: aeisoftware     # production
+  - kind: ServiceAccount
+    name: saas-portal
+    namespace: staging          # staging

@@ -36,7 +36,7 @@ metadata:
   name: odoo-admin-conf
   namespace: odoo-admin
 data:
-  addon-git-branch: "main"
+  addon-git-branch: "18.0"
   odoo.conf.tmpl: |
     [options]
     db_host = postgres.aeisoftware.svc.cluster.local
