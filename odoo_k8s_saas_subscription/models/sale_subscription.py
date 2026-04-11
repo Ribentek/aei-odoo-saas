@@ -208,10 +208,49 @@ class SaleSubscription(models.Model):
         }
 
     # ── Stage-change hooks ──────────────────────────────────────
+    # ── Stage-change and Template-change hooks ────────────────────────────────
     def write(self, vals):
-        """Detect stage_id changes and trigger SaaS actions."""
+        """Detect stage_id and template_id changes and trigger SaaS actions."""
         old_stages = {rec.id: rec.stage_id.id for rec in self}
+        old_templates = {rec.id: rec.template_id.id for rec in self}
         res = super().write(vals)
+
+        # Handle template_id change (Upgrades)
+        if "template_id" in vals:
+            for rec in self:
+                if old_templates.get(rec.id) == rec.template_id.id:
+                    continue
+                
+                instances = self.env["saas.instance"].search([
+                    ("subscription_id", "=", rec.id),
+                    ("state", "not in", ["deleted"]),
+                ])
+                if not instances:
+                    continue
+                
+                plan = "starter"
+                if rec.template_id:
+                    tmpl_name = (rec.template_id.name or "").lower()
+                    if "enterprise" in tmpl_name:
+                        plan = "enterprise"
+                    elif "pro" in tmpl_name:
+                        plan = "pro"
+                
+                storage_map = {"starter": 10, "pro": 50, "enterprise": 100}
+                new_storage = storage_map.get(plan, 10)
+                
+                for inst in instances:
+                    if inst.plan != plan or inst.storage_gi != new_storage:
+                        logger.info("Upgrade/Downgrade: Subscription %s changed from template_id %s to %s. Updating instance %s.", rec.display_name, old_templates.get(rec.id), rec.template_id.id, inst.tenant_id)
+                        inst.write({
+                            "plan": plan,
+                            "storage_gi": new_storage,
+                        })
+                        try:
+                            # Re-provision applies new limits via k8s_utils
+                            inst.action_provision()
+                        except Exception:
+                            logger.exception("Failed to apply upgraded resource limits for %s", inst.tenant_id)
 
         if "stage_id" not in vals:
             return res
@@ -244,7 +283,7 @@ class SaleSubscription(models.Model):
             if stage_in_progress and new_stage_id == stage_in_progress.id:
                 # Guard: only provision if the template is marked as a SaaS plan
                 if (not instances and rec.sale_order_id
-                        and rec.template_id and rec.template_id.is_saas_plan):
+                        and rec.template_id and getattr(rec.template_id, 'is_saas_plan', False)):
                     # Collect ALL SaaS order lines (one instance per line)
                     saas_category = self.env.ref(
                         "odoo_k8s_saas.product_category_odoo_saas",
@@ -345,17 +384,17 @@ class SaleSubscription(models.Model):
                             inst.tenant_id, rec.display_name,
                         )
 
-            # → Closed: mark all non-deleted instances for async deletion
+            # → Closed: suspend all non-deleted instances safely instead of deleting
             elif stage_closed and new_stage_id == stage_closed.id:
                 to_delete = instances.filtered(
                     lambda i: i.state in ("draft", "provisioning", "ready", "suspended")
                 )
                 if to_delete:
                     logger.info(
-                        "Subscription %s → Closed: marking %d instance(s) for async deletion",
+                        "Subscription %s → Closed: marking %d instance(s) FOR SUSPENSION to prevent data loss",
                         rec.display_name, len(to_delete),
                     )
-                    to_delete.action_request_delete()
+                    to_delete.action_stop()
 
         return res
 
@@ -570,4 +609,41 @@ class SaleSubscription(models.Model):
                     "%s → %d extra users × %.2f Bs.",
                     sub.display_name, extra, price,
                 )
+
+    @api.model
+    def cron_subscription_management(self):
+        """Override to prevent TypeError if recurring_next_date is False on dirty data"""
+        today = fields.Date.today()
+        # Fallback filter just in case
+        for subscription in self.search([], order="recurring_next_date asc"):
+            try:
+                subscription = subscription.with_company(subscription.company_id)
+                if subscription.in_progress:
+                    if (
+                        subscription.recurring_next_date
+                        and subscription.recurring_next_date <= today
+                        and subscription.sale_subscription_line_ids
+                    ):
+                        try:
+                            subscription.generate_invoice()
+                        except Exception:
+                            logger.exception("Error on subscription invoice generate (Tenant: %s)", subscription.display_name)
+                    if (
+                        not subscription.recurring_rule_boundary
+                        and subscription.date 
+                        and subscription.date <= today
+                    ):
+                        subscription.close_subscription()
+                elif (
+                    subscription.date_start 
+                    and subscription.date_start <= today 
+                    and subscription.stage_id.type == "pre"
+                ):
+                    subscription.action_start_subscription()
+                    try:
+                        subscription.generate_invoice()
+                    except Exception:
+                        logger.exception("Error on subscription invoice generate (Tenant: %s)", subscription.display_name)
+            except Exception:
+                logger.exception("Fatal error processing subscription %s in cron", subscription.id)
 
