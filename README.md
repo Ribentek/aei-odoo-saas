@@ -54,14 +54,25 @@ Internet → Cloudflare Tunnel → Traefik (K3s ingress)
 
 ---
 
-## Branch Strategy
+## Branch Strategy & Namespace Topology
 
-| Branch | Environment | Deploy |
-|:-------|:-----------|:-------|
-| `main` | Staging (`staging.aeisoftware.com`) | Auto via pod restart (git-clone init container) |
-| `18.0` | Production (`admin.aeisoftware.com`) | Manual merge + rollout during maintenance windows |
+| Branch | Ambiente | Namespace K8s | Pod / Deploy | Dominio |
+|:-------|:---------|:-------------|:------------|:--------|
+| `main` | **Staging** | `staging` | `odoo-stg` | `staging.aeisoftware.com` |
+| `18.0` | **Producción** | `odoo-admin` | `odoo-admin` | `admin.aeisoftware.com` / `www.aeisoftware.com` |
 
-> **Rule:** All changes go to `main` first, tested in staging, then promoted to `18.0`.
+> **Regla:** Todos los cambios van a `main` primero, se prueban en Staging, y luego se promueven a `18.0`.
+
+> [!CAUTION]
+> **Para reiniciar Staging** usar siempre:
+> ```bash
+> kubectl rollout restart deployment/odoo-stg -n staging
+> ```
+> **Para reiniciar Producción** (solo en ventanas de mantenimiento):
+> ```bash
+> kubectl rollout restart deployment/odoo-admin -n odoo-admin
+> ```
+> ⚠️ `odoo-admin` es **PRODUCCIÓN**. `odoo-stg` es **STAGING**.
 
 ---
 
