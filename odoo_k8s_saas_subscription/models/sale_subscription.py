@@ -247,8 +247,9 @@ class SaleSubscription(models.Model):
                             "storage_gi": new_storage,
                         })
                         try:
-                            # Re-provision applies new limits via k8s_utils
-                            inst.action_provision()
+                            # action_upgrade() patches ConfigMap + Deployment in-place
+                            # (action_provision would fail here because state is 'ready')
+                            inst.action_upgrade()
                         except Exception:
                             logger.exception("Failed to apply upgraded resource limits for %s", inst.tenant_id)
 

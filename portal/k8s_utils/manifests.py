@@ -26,6 +26,27 @@ STORAGE_CLASS = os.getenv("STORAGE_CLASS", "local-path")
 # Los middlewares (odoo-headers, odoo-compress) están en kube-system (ver 02-traefik-config.yaml)
 ODOO_HEADERS_MIDDLEWARE = os.getenv("ODOO_HEADERS_MIDDLEWARE", "kube-system-odoo-headers@kubernetescrd")
 
+# ── Per-plan compute resources ───────────────────────────────────────────────
+# Each plan tier gets different Odoo workers, CPU, and RAM limits.
+# These values are injected into the ConfigMap (odoo.conf) and Deployment.
+PLAN_RESOURCES = {
+    "starter": {
+        "workers": 2, "cron_threads": 1,
+        "cpu_req": "100m", "cpu_lim": "500m",
+        "mem_req": "512Mi", "mem_lim": "1Gi",
+    },
+    "pro": {
+        "workers": 4, "cron_threads": 1,
+        "cpu_req": "250m", "cpu_lim": "1",
+        "mem_req": "1Gi", "mem_lim": "2Gi",
+    },
+    "enterprise": {
+        "workers": 8, "cron_threads": 1,
+        "cpu_req": "500m", "cpu_lim": "2",
+        "mem_req": "2Gi", "mem_lim": "4Gi",
+    },
+}
+
 
 def namespace_manifest(tenant_id: str) -> dict[str, Any]:
     """Namespace for one tenant: odoo-<tenant_id>"""
@@ -80,12 +101,14 @@ def secret_manifest(tenant_id: str, db_password: str, admin_password: str, app_a
     }
 
 
-def configmap_manifest(tenant_id: str, db_password: str, admin_password: str, addons_repos: list = None) -> dict[str, Any]:
+def configmap_manifest(tenant_id: str, db_password: str, admin_password: str, addons_repos: list = None, plan: str = "starter") -> dict[str, Any]:
     """Odoo config file per tenant — passwords are embedded at provision time."""
     db_name = _dbname(tenant_id)
     addons_repos = addons_repos or []
     import json
     addons_json_str = json.dumps(addons_repos)
+
+    res = PLAN_RESOURCES.get(plan, PLAN_RESOURCES["starter"])
 
     conf = f"""[options]
 db_host = {POSTGRES_HOST}
@@ -98,8 +121,8 @@ dbfilter = ^{db_name}$
 list_db = False
 addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons
 data_dir = /var/lib/odoo
-workers = 2
-max_cron_threads = 1
+workers = {res["workers"]}
+max_cron_threads = {res["cron_threads"]}
 gevent_port = 8072
 proxy_mode = True
 without_demo = True
@@ -119,9 +142,10 @@ without_demo = True
 
 
 
-def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image: str | None = None) -> dict[str, Any]:
+def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image: str | None = None, plan: str = "starter") -> dict[str, Any]:
     pg_user = f"odoo-{tenant_id}"
     active_image = custom_image if custom_image else f"odoo:{odoo_version}"
+    res = PLAN_RESOURCES.get(plan, PLAN_RESOURCES["starter"])
     # Shared volume mounts and env used by both init and main containers
     _vol_mounts = [
         {"name": "odoo-conf", "mountPath": "/etc/odoo"},
@@ -239,8 +263,8 @@ def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image
                                 "failureThreshold": 40,
                             },
                             "resources": {
-                                "requests": {"cpu": "100m", "memory": "512Mi"},
-                                "limits":   {"cpu": "1",    "memory": "2Gi"},
+                                "requests": {"cpu": res["cpu_req"], "memory": res["mem_req"]},
+                                "limits":   {"cpu": res["cpu_lim"], "memory": res["mem_lim"]},
                             },
                         }
                     ],
@@ -362,6 +386,7 @@ def all_manifests(
     addons_repos: list | None = None,
     odoo_version: str = "18.0",
     custom_image: str | None = None,
+    plan: str = "starter",
 ) -> list[dict]:
     """Return all manifests in apply-order."""
     return [
@@ -369,8 +394,8 @@ def all_manifests(
         network_policy_manifest(tenant_id),
         pvc_manifest(tenant_id, storage_gi),
         secret_manifest(tenant_id, db_password, admin_password, app_admin_password),
-        configmap_manifest(tenant_id, db_password, admin_password, addons_repos),
-        deployment_manifest(tenant_id, odoo_version, custom_image),
+        configmap_manifest(tenant_id, db_password, admin_password, addons_repos, plan=plan),
+        deployment_manifest(tenant_id, odoo_version, custom_image, plan=plan),
         service_manifest(tenant_id),
         ingress_manifest(tenant_id),
     ]

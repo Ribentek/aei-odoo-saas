@@ -234,6 +234,41 @@ class SaasInstance(models.Model):
             self.write({"state": "error", "error_msg": str(exc)})
             raise UserError(f"Provisioning failed: {exc}") from exc
 
+    def action_upgrade(self):
+        """Upgrade compute resources for a running instance (plan change).
+
+        Unlike action_provision() which only works on draft/error instances,
+        this method works on 'ready' instances and sends a PATCH to the portal
+        to update ConfigMap (workers) and Deployment (CPU/RAM) in-place.
+        """
+        self.ensure_one()
+        if self.state not in ("ready",):
+            logger.warning(
+                "action_upgrade(%s): skipping — instance state is '%s', not 'ready'.",
+                self.tenant_id, self.state,
+            )
+            return
+
+        try:
+            body = {
+                "plan": self.plan,
+                "storage_gi": self.storage_gi,
+            }
+            resp = requests.patch(
+                f"{PORTAL_URL}/api/v1/instances/{self.tenant_id}/upgrade",
+                json=body,
+                headers={"X-API-Key": PORTAL_KEY},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            logger.info(
+                "action_upgrade(%s): upgraded to plan '%s' (storage=%dGi).",
+                self.tenant_id, self.plan, self.storage_gi,
+            )
+        except Exception as exc:
+            self.write({"error_msg": f"Upgrade failed: {exc}"})
+            logger.exception("action_upgrade(%s): failed", self.tenant_id)
+
     def action_check_status(self):
         """Refresh state from portal — useful from buttons or cron."""
         for rec in self.filtered(lambda r: r.state in ("provisioning",)):
