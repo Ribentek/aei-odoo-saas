@@ -39,8 +39,8 @@ class CreateInstanceRequest(BaseModel):
     @field_validator("tenant_id")
     @classmethod
     def validate_tenant_id(cls, v: str) -> str:
-        if not re.match(r"^[a-z0-9][a-z0-9\-]{0,30}[a-z0-9]$", v):
-            raise ValueError("tenant_id must be lowercase alphanumeric/hyphens, 2-32 chars")
+        if not re.match(r"^[a-z0-9][a-z0-9\-]{0,46}[a-z0-9]$", v):
+            raise ValueError("tenant_id must be lowercase alphanumeric/hyphens, 2-48 chars")
         return v
 
 
