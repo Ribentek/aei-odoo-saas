@@ -1,0 +1,21 @@
+---
+# Seguridad en backup-system:
+# - Denegar TODO ingress (no se requiere exponer nada hacia dentro)
+# - Egress abierto temporalmente (MVP): RBAC + Secrets + namespace aislado son
+#   suficientes para el riesgo actual. El endurecimiento del NP egress
+#   (restringir a apiserver + RadosGW + PG HA) queda como follow-up del hito 7
+#   (cert-manager) y hito 11 (alertas).
+#
+# Contexto del problema conocido: Cilium socket-LB reescribe el destino antes
+# de la evaluación de NetworkPolicy, bloqueando conexiones al kube-apiserver
+# vía ClusterIP 10.43.0.1:443 incluso con reglas explícitas. Revisar con
+# CiliumNetworkPolicy (CRD) en lugar de NetworkPolicy estándar.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: backup-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress

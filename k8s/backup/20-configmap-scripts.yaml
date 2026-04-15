@@ -1,0 +1,185 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-scripts
+  namespace: backup-system
+data:
+  pg-dump-all.sh: |
+    #!/bin/sh
+    # pg-dump-all.sh — Logical backup of every Odoo database to RadosGW S3
+    # Runs against the HAProxy replica endpoint (:5001) to avoid load on primary.
+    # Env vars required:
+    #   PGPASSWORD          — postgres superuser password
+    #   AWS_ACCESS_KEY_ID   — RadosGW access key
+    #   AWS_SECRET_ACCESS_KEY — RadosGW secret key
+    #   S3_ENDPOINT         — e.g. http://10.40.1.240:7480
+    #   S3_BUCKET           — e.g. pg-backups
+    set -eu
+
+    HOST="postgres.aeisoftware.svc.cluster.local"
+    PORT="5001"
+    DATE=$(date +%Y-%m-%d)
+    ERRORS=0
+
+    echo "[$(date -u +%H:%M:%SZ)] Starting pg logical dump — date=${DATE}"
+
+    # Install aws-cli if not present (postgres:16-alpine base image)
+    if ! command -v aws >/dev/null 2>&1; then
+      echo "[$(date -u +%H:%M:%SZ)] Installing aws-cli..."
+      apk add --no-cache aws-cli --quiet
+    fi
+
+    # Enumerate all Odoo databases
+    DBS=$(psql -h "$HOST" -p "$PORT" -U postgres -tAc \
+      "SELECT datname FROM pg_database
+       WHERE (datname = 'admin' OR datname LIKE 'odoo\_%')
+         AND datistemplate = false;" 2>&1) || {
+      echo "[ERROR] Cannot connect to PostgreSQL at $HOST:$PORT"
+      exit 1
+    }
+
+    if [ -z "$DBS" ]; then
+      echo "[WARN] No databases found matching admin or odoo_*"
+      exit 0
+    fi
+
+    for DB in $DBS; do
+      echo "[$(date -u +%H:%M:%SZ)] Dumping $DB..."
+      S3_KEY="pgdump/${DB}/${DATE}.dump"
+
+      pg_dump -h "$HOST" -p "$PORT" -U postgres -Fc -Z6 -d "$DB" \
+        | aws --endpoint-url "$S3_ENDPOINT" \
+              --no-verify-ssl \
+              s3 cp - "s3://${S3_BUCKET}/${S3_KEY}" \
+              --expected-size 10737418240 2>&1 \
+        && echo "[$(date -u +%H:%M:%SZ)]   ✓ s3://${S3_BUCKET}/${S3_KEY}" \
+        || { echo "[ERROR] Failed to dump/upload $DB"; ERRORS=$((ERRORS+1)); }
+    done
+
+    echo "[$(date -u +%H:%M:%SZ)] Done. Errors: $ERRORS"
+    exit $ERRORS
+
+  filestore-dump-all.sh: |
+    #!/bin/sh
+    # filestore-dump-all.sh — Tar Odoo filestore PVCs and upload to RadosGW S3
+    # Uses kubectl exec streaming to avoid RWO mount conflicts.
+    # Env vars required: same S3 vars as pg-dump-all.sh
+    set -eu
+
+    DATE=$(date +%Y-%m-%d)
+    ERRORS=0
+    FILESTORE_BASE="/var/lib/odoo/.local/share/Odoo/filestore"
+
+    echo "[$(date -u +%H:%M:%SZ)] Starting filestore dump — date=${DATE}"
+
+    # ── Backup admin filestore ────────────────────────────────────────────────
+    echo "[$(date -u +%H:%M:%SZ)] Backing up admin filestore..."
+    POD=$(kubectl -n odoo-admin get pod -l app=odoo-admin \
+          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+    if [ -n "$POD" ]; then
+      # Verify filestore directory exists before streaming — prevents false-positive
+      # success when dir is absent (empty tar + aws exit 0 would mask the problem).
+      if ! kubectl -n odoo-admin exec "$POD" -- test -d "$FILESTORE_BASE" 2>/dev/null; then
+        echo "[WARN] Filestore path not found in odoo-admin pod, skipping"
+      else
+        kubectl -n odoo-admin exec "$POD" -- \
+          tar czf - --ignore-failed-read -C "$FILESTORE_BASE" . \
+          | aws --endpoint-url "$S3_ENDPOINT" --no-verify-ssl \
+                s3 cp - "s3://${S3_BUCKET}/filestore/admin/${DATE}.tgz" \
+                --expected-size 10737418240 \
+          && echo "[$(date -u +%H:%M:%SZ)]   ✓ admin filestore" \
+          || { echo "[ERROR] Failed admin filestore"; ERRORS=$((ERRORS+1)); }
+      fi
+    else
+      echo "[WARN] No odoo-admin pod found, skipping admin filestore"
+    fi
+
+    # ── Backup tenant filestores ──────────────────────────────────────────────
+    NAMESPACES=$(kubectl get ns -l managed-by=saas-portal \
+                 -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+
+    for NS in $NAMESPACES; do
+      TENANT_ID="${NS#odoo-}"
+      DB="odoo_${TENANT_ID}"
+      echo "[$(date -u +%H:%M:%SZ)] Backing up ${NS} filestore (db=${DB})..."
+
+      POD=$(kubectl -n "$NS" get pod -l app=odoo \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+      if [ -z "$POD" ]; then
+        echo "[WARN] No running pod in $NS, skipping"
+        continue
+      fi
+
+      # Verify filestore directory exists before streaming
+      if ! kubectl -n "$NS" exec "$POD" -- test -d "$FILESTORE_BASE" 2>/dev/null; then
+        echo "[WARN] Filestore path not found in $NS/$POD, skipping"
+        continue
+      fi
+
+      kubectl -n "$NS" exec "$POD" -- \
+        tar czf - --ignore-failed-read -C "$FILESTORE_BASE" . \
+        | aws --endpoint-url "$S3_ENDPOINT" --no-verify-ssl \
+              s3 cp - "s3://${S3_BUCKET}/filestore/${DB}/${DATE}.tgz" \
+              --expected-size 10737418240 \
+        && echo "[$(date -u +%H:%M:%SZ)]   ✓ ${NS} filestore" \
+        || { echo "[ERROR] Failed ${NS} filestore"; ERRORS=$((ERRORS+1)); }
+    done
+
+    echo "[$(date -u +%H:%M:%SZ)] Done. Errors: $ERRORS"
+    exit $ERRORS
+
+  prune-s3.sh: |
+    #!/bin/sh
+    # prune-s3.sh — Remove old dumps from S3 applying retention policy:
+    #   pg_dump:   keep 7 daily, 4 weekly (Sunday), 3 monthly (1st of month)
+    #   filestore: keep 7 daily, 4 weekly
+    set -eu
+
+    echo "[$(date -u +%H:%M:%SZ)] Starting S3 prune..."
+
+    TODAY=$(date +%Y-%m-%d)
+
+    # Collect all date-named objects under a given prefix
+    # Usage: prune_prefix <prefix> <daily_keep> <weekly_keep> <monthly_keep>
+    prune_prefix() {
+      PREFIX="$1"
+      DAILY_KEEP="${2:-7}"
+      WEEKLY_KEEP="${3:-4}"
+      MONTHLY_KEEP="${4:-3}"
+
+      KEYS=$(aws --endpoint-url "$S3_ENDPOINT" --no-verify-ssl \
+               s3 ls "s3://${S3_BUCKET}/${PREFIX}" --recursive \
+             | awk '{print $4}' | grep -E '[0-9]{4}-[0-9]{2}-[0-9]{2}\.(dump|tgz)$' | sort)
+
+      for KEY in $KEYS; do
+        FILENAME=$(basename "$KEY")
+        FILE_DATE="${FILENAME%.*}"
+
+        # Keep if within DAILY_KEEP days
+        DIFF=$(( ($(date -d "$TODAY" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$TODAY" +%s) \
+                - $(date -d "$FILE_DATE" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$FILE_DATE" +%s)) / 86400 ))
+        [ "$DIFF" -le "$DAILY_KEEP" ] && continue
+
+        # Keep if Sunday (weekly) and within WEEKLY_KEEP weeks
+        DOW=$(date -d "$FILE_DATE" +%u 2>/dev/null || date -j -f "%Y-%m-%d" "$FILE_DATE" +%u 2>/dev/null || echo 0)
+        WEEKS=$(( DIFF / 7 ))
+        [ "$DOW" = "7" ] && [ "$WEEKS" -le "$WEEKLY_KEEP" ] && continue
+
+        # Keep if 1st of month (monthly) and within MONTHLY_KEEP months
+        DOM="${FILE_DATE##*-}"
+        MONTHS=$(( DIFF / 30 ))
+        [ "$DOM" = "01" ] && [ "$MONTHS" -le "$MONTHLY_KEEP" ] && continue
+
+        echo "  Deleting s3://${S3_BUCKET}/${KEY} (age=${DIFF}d)"
+        aws --endpoint-url "$S3_ENDPOINT" --no-verify-ssl \
+            s3 rm "s3://${S3_BUCKET}/${KEY}" || true
+      done
+    }
+
+    echo "Pruning pgdump/ (7d daily, 4 weekly, 3 monthly)..."
+    prune_prefix "pgdump/" 7 4 3
+
+    echo "Pruning filestore/ (7d daily, 4 weekly)..."
+    prune_prefix "filestore/" 7 4 0
+
+    echo "[$(date -u +%H:%M:%SZ)] Prune complete."

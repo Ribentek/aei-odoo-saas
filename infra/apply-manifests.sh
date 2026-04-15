@@ -51,7 +51,7 @@ set +o allexport
 
 # Validate required variables are set and not placeholders
 missing=()
-for var in DB_PASSWORD ADMIN_PASSWD API_KEY CLOUDFLARE_TUNNEL_TOKEN; do
+for var in DB_PASSWORD ADMIN_PASSWD API_KEY CLOUDFLARE_TUNNEL_TOKEN BACKUP_S3_ACCESS_KEY BACKUP_S3_SECRET_KEY BACKUP_PG_SUPERUSER_PASSWORD; do
   val="${!var:-}"
   if [[ -z "$val" || "$val" == "change_me" ]]; then
     missing+=("$var")
@@ -67,8 +67,9 @@ fi
 
 # ── Ensure namespaces exist before we try to create secrets in them ──────────
 echo "==> Ensuring namespaces exist …"
-kubectl create namespace aeisoftware --dry-run=client -o yaml | kubectl apply $KUBECTL_ARGS -f - 2>/dev/null || true
-kubectl create namespace odoo-admin  --dry-run=client -o yaml | kubectl apply $KUBECTL_ARGS -f - 2>/dev/null || true
+kubectl create namespace aeisoftware   --dry-run=client -o yaml | kubectl apply $KUBECTL_ARGS -f - 2>/dev/null || true
+kubectl create namespace odoo-admin    --dry-run=client -o yaml | kubectl apply $KUBECTL_ARGS -f - 2>/dev/null || true
+kubectl create namespace backup-system --dry-run=client -o yaml | kubectl apply $KUBECTL_ARGS -f - 2>/dev/null || true
 
 # ── Ensure odoo-admin PVC exists (kubectl apply silently drops PVCs on 06) ───
 echo "==> Ensuring odoo-admin-data PVC exists …"
@@ -128,6 +129,33 @@ stringData:
   ADMIN_PASSWD: "${ADMIN_PASSWD}"
 EOF
 
+# ── Backup system secrets (backup-system namespace) ──────────────────────────
+echo "==> Aplicando backup secrets en namespace backup-system ..."
+BACKUP_S3_ENDPOINT="${BACKUP_S3_ENDPOINT:-http://10.40.1.240:7480}"
+BACKUP_S3_BUCKET="${BACKUP_S3_BUCKET:-pg-backups}"
+cat <<EOF | kubectl apply $KUBECTL_ARGS --validate=false -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backup-s3-secret
+  namespace: backup-system
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: "${BACKUP_S3_ACCESS_KEY}"
+  AWS_SECRET_ACCESS_KEY: "${BACKUP_S3_SECRET_KEY}"
+  S3_ENDPOINT: "${BACKUP_S3_ENDPOINT}"
+  S3_BUCKET: "${BACKUP_S3_BUCKET}"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-superuser-secret
+  namespace: backup-system
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "${BACKUP_PG_SUPERUSER_PASSWORD}"
+EOF
+
 # Cloudflare tunnel token — inyectar en namespace cloudflare (no en aeisoftware)
 echo "==> Aplicando cloudflared-token en namespace cloudflare ..."
 kubectl create namespace cloudflare --dry-run=client -o yaml | kubectl apply $KUBECTL_ARGS -f - 2>/dev/null || true
@@ -144,6 +172,12 @@ EOF
 
 # ── Apply all other manifests (secrets files are deliberately skipped) ────────
 echo "==> Applying manifests …"
+# Apply backup/ subdirectory manifests (namespace, RBAC, NetworkPolicy, scripts, CronJobs)
+for f in "$REPO_ROOT"/k8s/backup/*.yaml; do
+  echo "  applying $f …"
+  kubectl apply $KUBECTL_ARGS --validate=false -f "$f"
+done
+
 for f in "$REPO_ROOT"/k8s/0*.yaml; do
   filename=$(basename "$f")
 

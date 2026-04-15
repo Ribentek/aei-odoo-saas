@@ -1,0 +1,72 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: filestore-dump
+  namespace: backup-system
+  labels:
+    app: filestore-dump
+    managed-by: saas-infra
+spec:
+  # 04:00 AM America/La_Paz — after pg_dump (03:30)
+  schedule: "0 4 * * *"
+  timeZone: "America/La_Paz"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 10800  # 3h max — filestore can be large
+      template:
+        metadata:
+          labels:
+            app: filestore-dump
+        spec:
+          serviceAccountName: backup-runner
+          restartPolicy: Never
+          containers:
+            - name: filestore-dump
+              # alpine/k8s includes kubectl + aws-cli + tar
+              image: alpine/k8s:1.34.1
+              command: ["/bin/sh", "/scripts/filestore-dump-all.sh"]
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-s3-secret
+                      key: AWS_ACCESS_KEY_ID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-s3-secret
+                      key: AWS_SECRET_ACCESS_KEY
+                - name: S3_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-s3-secret
+                      key: S3_ENDPOINT
+                - name: S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-s3-secret
+                      key: S3_BUCKET
+                - name: AWS_DEFAULT_REGION
+                  value: "default"
+                - name: HOME
+                  value: "/tmp"
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+          volumes:
+            - name: scripts
+              configMap:
+                name: backup-scripts
+                defaultMode: 0755

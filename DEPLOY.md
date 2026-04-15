@@ -134,6 +134,144 @@ kubectl get ingress -n aeisoftware
 
 ---
 
+## Backup y Restauración
+
+### Arquitectura del backup
+
+| CronJob | Horario (La_Paz) | Retención | Destino S3 |
+|---------|-----------------|-----------|------------|
+| `pg-logical-dump` | 03:30 diario | 7d daily · 4w weekly · 3mo monthly | `s3://pg-backups/pgdump/<db>/<fecha>.dump` |
+| `filestore-dump` | 04:00 diario | 7d daily · 4w weekly | `s3://pg-backups/filestore/<db>/<fecha>.tgz` |
+| `backup-prune` | 05:00 domingos | — | elimina objetos S3 fuera de retención |
+
+> **Limitación conocida:** tenants suspendidos (pod escalado a 0) no generan backup de filestore.
+> La BD sí se respalda desde PostgreSQL HA (via HAProxy :5001). El filestore se recupera del último backup antes de la suspensión.
+
+### Verificar estado de backups
+
+```bash
+# Ver últimos 3 jobs de pg_dump
+kubectl get jobs -n backup-system -l app=pg-logical-dump --sort-by=.metadata.creationTimestamp
+
+# Ver logs del último job pg_dump
+kubectl logs -n backup-system -l app=pg-logical-dump --tail=50
+
+# Ver logs del último job filestore
+kubectl logs -n backup-system -l app=filestore-dump --tail=50
+
+# Listar dumps disponibles en S3 (desde un pod con aws-cli o kubectl run)
+kubectl run -it --rm awscli --image=amazon/aws-cli --restart=Never -- \
+  --endpoint-url http://10.40.1.240:7480 \
+  s3 ls s3://pg-backups/ --recursive
+```
+
+### Restaurar una base de datos (pg_dump)
+
+```bash
+# 1. Identificar el dump a restaurar
+#    Formato: pgdump/<db>/<YYYY-MM-DD>.dump
+DB=odoo_acme                  # o 'admin'
+FECHA=2026-04-14
+S3_KEY="pgdump/${DB}/${FECHA}.dump"
+
+# 2. Descargar el dump desde S3 a un pod temporal
+kubectl run -it --rm pg-restore \
+  --image=postgres:16-alpine \
+  --env="PGPASSWORD=<superuser-password>" \
+  --env="AWS_ACCESS_KEY_ID=<key>" \
+  --env="AWS_SECRET_ACCESS_KEY=<secret>" \
+  --restart=Never -- /bin/sh
+
+# Dentro del pod temporal:
+apk add --no-cache aws-cli
+aws --endpoint-url http://10.40.1.240:7480 --no-verify-ssl \
+    s3 cp "s3://pg-backups/${S3_KEY}" /tmp/restore.dump
+
+# 3. Restaurar en una BD nueva (nunca sobre la BD en uso sin detener Odoo primero)
+createdb -h postgres.aeisoftware.svc.cluster.local -p 5001 \
+         -U postgres "${DB}_restore"
+pg_restore -h postgres.aeisoftware.svc.cluster.local -p 5001 \
+           -U postgres -d "${DB}_restore" \
+           --no-owner --role=odoo \
+           /tmp/restore.dump
+
+# 4. Verificar la BD restaurada, luego renombrar si todo está OK:
+#    Detener el pod Odoo del tenant antes de renombrar.
+psql -h postgres.aeisoftware.svc.cluster.local -p 5001 -U postgres \
+  -c "ALTER DATABASE ${DB} RENAME TO ${DB}_bak; \
+      ALTER DATABASE ${DB}_restore RENAME TO ${DB};"
+
+# 5. Reiniciar el pod del tenant
+kubectl rollout restart deployment/odoo -n odoo-<tenant_id>
+```
+
+### Restaurar filestore de un tenant
+
+```bash
+TENANT=acme
+DB="odoo_${TENANT}"
+NS="odoo-${TENANT}"
+FECHA=2026-04-14
+
+# 1. Escalar a 0 el pod del tenant (para desmontar el filestore)
+kubectl scale deployment/odoo -n "$NS" --replicas=0
+
+# 2. Bajar el tgz desde S3 usando un pod temporal con la misma PVC
+kubectl run -it --rm filestore-restore \
+  --image=amazon/aws-cli \
+  --overrides='{
+    "spec": {
+      "volumes": [{"name":"fs","persistentVolumeClaim":{"claimName":"odoo-'"$TENANT"'-data"}}],
+      "containers": [{"name":"filestore-restore","image":"amazon/aws-cli",
+        "command":["sh"],
+        "volumeMounts":[{"name":"fs","mountPath":"/filestore"}]}]
+    }
+  }' --restart=Never -- /bin/sh
+
+# Dentro del pod de restauración:
+aws --endpoint-url http://10.40.1.240:7480 --no-verify-ssl \
+    s3 cp "s3://pg-backups/filestore/${DB}/${FECHA}.tgz" /tmp/restore.tgz
+# Limpiar filestore actual y extraer el backup
+rm -rf /filestore/.local
+tar xzf /tmp/restore.tgz -C /filestore/.local/share/Odoo/filestore/
+
+# 3. Restaurar el pod del tenant
+kubectl scale deployment/odoo -n "$NS" --replicas=1
+kubectl rollout status deployment/odoo -n "$NS"
+```
+
+### Restaurar el admin Odoo
+
+```bash
+FECHA=2026-04-14
+
+# 1. Escalar a 0
+kubectl scale deployment/odoo-admin -n odoo-admin --replicas=0
+
+# 2. Restaurar BD admin (mismos pasos que arriba, DB='admin')
+
+# 3. Restaurar filestore admin con la misma técnica de pod temporal
+#    PVC: odoo-admin-data — mountPath /filestore
+
+# 4. Reiniciar
+kubectl scale deployment/odoo-admin -n odoo-admin --replicas=1
+```
+
+### Forzar un backup inmediato (manual)
+
+```bash
+# Lanzar job de pg_dump ahora mismo
+kubectl create job -n backup-system --from=cronjob/pg-logical-dump pg-dump-manual-$(date +%s)
+
+# Lanzar job de filestore ahora mismo
+kubectl create job -n backup-system --from=cronjob/filestore-dump filestore-manual-$(date +%s)
+
+# Seguir los logs en tiempo real
+kubectl logs -n backup-system -l app=pg-logical-dump -f
+```
+
+---
+
 ## Notas importantes
 
 - El initContainer `copy-addon` clona `main` con `--depth=1` en **cada restart** del pod.
