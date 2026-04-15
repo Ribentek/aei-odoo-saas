@@ -144,6 +144,7 @@ without_demo = True
 
 def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image: str | None = None, plan: str = "starter") -> dict[str, Any]:
     pg_user = f"odoo-{tenant_id}"
+    db_name = _dbname(tenant_id)
     active_image = custom_image if custom_image else f"odoo:{odoo_version}"
     res = PLAN_RESOURCES.get(plan, PLAN_RESOURCES["starter"])
     # Shared volume mounts and env used by both init and main containers
@@ -184,8 +185,8 @@ def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image
             "template": {
                 "metadata": {"labels": {"app": "odoo", "tenant": tenant_id}},
                 "spec": {
-                    # Init container: bootstrap the DB schema (workers>0 mode can't do this)
                     "initContainers": [
+                        # 1. Clone custom addons from git repos listed in addons.json
                         {
                             "name": "clone-addons",
                             "image": "python:3.10-alpine",
@@ -220,18 +221,46 @@ def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image
                                 "runAsNonRoot": False,
                             },
                         },
+                        # 2. Wait for PostgreSQL HA to be reachable before attempting DB init.
+                        #    Prevents CrashLoopBackOff caused by DNS timeout on early pod startup.
+                        {
+                            "name": "wait-for-postgres",
+                            "image": "busybox:1.36",
+                            "command": ["/bin/sh", "-c"],
+                            "args": [
+                                f"echo 'Waiting for PostgreSQL HA at {POSTGRES_HOST}:{POSTGRES_PORT}...'; "
+                                f"until nc -z {POSTGRES_HOST} {POSTGRES_PORT}; do "
+                                "  echo 'PostgreSQL not ready, retrying in 3s...'; sleep 3; "
+                                "done; "
+                                "echo 'PostgreSQL is ready.'"
+                            ],
+                        },
+                        # 3. Bootstrap DB schema on first start; skip if DB already exists
+                        #    (idempotent — safe on CrashLoopBackOff restarts, avoids 45-120s
+                        #    re-init overhead that was causing 58-60 restart cycles).
                         {
                             "name": "odoo-init",
                             "image": active_image,
                             "imagePullPolicy": "Always",
                             "command": ["/bin/sh", "-c"],
                             "args": [
-                                "odoo --config=/etc/odoo/odoo.conf --init=base --stop-after-init && "
-                                "echo \"env.ref('base.user_admin').write({'password': '${APP_ADMIN_PASSWORD}'}); env.cr.commit()\" | odoo shell --config=/etc/odoo/odoo.conf"
+                                f"DB_EXISTS=$(PGPASSWORD=$DB_PASSWORD psql "
+                                f"-h {POSTGRES_HOST} -p {POSTGRES_PORT} "
+                                f"-U {pg_user} -tAc "
+                                f"\"SELECT 1 FROM pg_database WHERE datname='{db_name}'\" "
+                                f"2>/dev/null || true); "
+                                "if [ \"$DB_EXISTS\" = \"1\" ]; then "
+                                f"  echo 'DB {db_name} already initialized, skipping --init=base'; "
+                                "else "
+                                "  echo 'Initializing DB for the first time...'; "
+                                "  odoo --config=/etc/odoo/odoo.conf --init=base --stop-after-init && "
+                                "  echo \"env.ref('base.user_admin').write({'password': '${APP_ADMIN_PASSWORD}'}); env.cr.commit()\" "
+                                "    | odoo shell --config=/etc/odoo/odoo.conf; "
+                                "fi"
                             ],
                             "env": _init_env,
                             "volumeMounts": _vol_mounts,
-                        }
+                        },
                     ],
                     "securityContext": {
                         "runAsNonRoot": True,
@@ -250,15 +279,21 @@ def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image
                             ],
                             "env": _env,
                             "volumeMounts": _vol_mounts,
+                            # startupProbe gives Odoo up to 10 min for the first boot
+                            # (module loading + ORM init can take 2-5 min).
+                            # Once it passes, livenessProbe takes over with strict timing.
+                            "startupProbe": {
+                                "httpGet": {"path": "/web/health", "port": 8069},
+                                "failureThreshold": 30,
+                                "periodSeconds": 20,
+                            },
                             "livenessProbe": {
                                 "httpGet": {"path": "/web/health", "port": 8069},
-                                "initialDelaySeconds": 120,
                                 "periodSeconds": 30,
                                 "failureThreshold": 3,
                             },
                             "readinessProbe": {
                                 "httpGet": {"path": "/web/health", "port": 8069},
-                                "initialDelaySeconds": 30,
                                 "periodSeconds": 15,
                                 "failureThreshold": 40,
                             },
