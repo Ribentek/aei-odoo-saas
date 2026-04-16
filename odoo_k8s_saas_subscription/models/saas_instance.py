@@ -1,8 +1,8 @@
 """
 models/saas_instance.py
 
-Extends saas.instance with a link to sale.subscription
-and per-user tracking fields.
+Extends saas.instance with a link to sale.subscription,
+per-user tracking fields, dunning state, and grace-period tracking.
 """
 from odoo import models, fields
 
@@ -39,5 +39,29 @@ class SaasInstance(models.Model):
         related="subscription_id.template_id.included_users",
         readonly=True,
         help="Maximum users included in the plan before extra charges apply.",
+    )
+
+    # ── Dunning fields ───────────────────────────────────────────
+    dunning_level = fields.Integer(
+        string="Dunning Level",
+        default=0,
+        tracking=True,
+        help="Payment dunning escalation level.\n"
+             "0 = current (no overdue)\n"
+             "1 = first warning sent (+1 day overdue)\n"
+             "2 = final warning sent (+3 days overdue)\n"
+             "3 = suspended (+5 days overdue)",
+    )
+    dunning_last_sent = fields.Date(
+        string="Last Dunning Email",
+        help="Date when the last dunning notification was sent.",
+    )
+
+    # ── Grace-period tracking ────────────────────────────────────
+    closed_date = fields.Datetime(
+        string="Closed Date",
+        tracking=True,
+        help="Timestamp when the linked subscription was closed. "
+             "Used to enforce a grace period before permanent deletion.",
     )
 

@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!-- ── Dunning Level 1: Payment overdue (+1 day) ─────────────────────── -->
+        <record id="email_template_dunning_level1" model="mail.template">
+            <field name="name">SaaS: Pago Vencido — Aviso 1 (Nivel 1)</field>
+            <field name="model_id" ref="odoo_k8s_saas.model_saas_instance"/>
+            <field name="subject">Tu pago está vencido — Acción requerida para {{ object.name }}</field>
+            <field name="email_from">{{ object.env.company.email_formatted }}</field>
+            <field name="email_to">{{ object.partner_id.email_formatted }}</field>
+            <field name="auto_delete" eval="True"/>
+            <field name="body_html" type="html">
+<div style="margin: 0; padding: 0;">
+    <table width="600" style="margin: 20px auto; font-family: Arial, sans-serif; border-collapse: collapse;">
+        <tr>
+            <td style="background-color: #f0ad4e; padding: 20px; color: #fff; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0; font-size: 20px;">&#9888; Aviso de Pago Vencido</h1>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 30px; background-color: #f9f9f9; border: 1px solid #ddd;">
+                <p>Hola <strong><t t-out="object.partner_id.name or 'Cliente'"/></strong>,</p>
+
+                <p>Tu suscripción al plan <strong><t t-out="(object.plan or 'SaaS').capitalize()"/></strong>
+                tiene un pago pendiente. Tu instancia de Odoo sigue activa por ahora.</p>
+
+                <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
+                    <tr style="background-color: #f0f0f0;">
+                        <td style="padding: 8px; font-weight: bold; width: 40%;">Instancia:</td>
+                        <td style="padding: 8px;"><t t-out="object.name"/></td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">URL:</td>
+                        <td style="padding: 8px;">
+                            <a t-attf-href="{{ object.url }}" style="color: #875A7B;"><t t-out="object.url"/></a>
+                        </td>
+                    </tr>
+                    <tr style="background-color: #f0f0f0;">
+                        <td style="padding: 8px; font-weight: bold;">Plan:</td>
+                        <td style="padding: 8px;"><t t-out="(object.plan or 'starter').capitalize()"/></td>
+                    </tr>
+                </table>
+
+                <p><strong>Por favor realiza el pago dentro de los próximos 3 días</strong>
+                para evitar la interrupción del servicio.</p>
+
+                <p style="text-align: center; margin: 30px 0;">
+                    <a t-attf-href="/my/subscriptions/{{ object.subscription_id.id }}"
+                       style="background-color: #875A7B; color: #fff; padding: 12px 28px;
+                              border-radius: 5px; text-decoration: none; font-weight: bold;">
+                        Ver mi suscripción y pagar
+                    </a>
+                </p>
+
+                <p>Si ya realizaste el pago, ignora este mensaje. El sistema se sincronizará automáticamente.</p>
+
+                <p>Si tienes alguna duda, responde a este correo o contáctanos.</p>
+
+                <p>Saludos,<br/><strong>AEI Software</strong></p>
+            </td>
+        </tr>
+        <tr>
+            <td style="background-color: #555; padding: 12px; color: #aaa; text-align: center;
+                        font-size: 12px; border-radius: 0 0 8px 8px;">
+                Este es un mensaje automático de la plataforma SaaS.
+            </td>
+        </tr>
+    </table>
+</div>
+            </field>
+        </record>
+
+        <!-- ── Dunning Level 2: Final warning (+3 days) ──────────────────────── -->
+        <record id="email_template_dunning_level2" model="mail.template">
+            <field name="name">SaaS: Pago Vencido — Aviso Final (Nivel 2)</field>
+            <field name="model_id" ref="odoo_k8s_saas.model_saas_instance"/>
+            <field name="subject">Aviso final: tu instancia será suspendida mañana — {{ object.name }}</field>
+            <field name="email_from">{{ object.env.company.email_formatted }}</field>
+            <field name="email_to">{{ object.partner_id.email_formatted }}</field>
+            <field name="auto_delete" eval="True"/>
+            <field name="body_html" type="html">
+<div style="margin: 0; padding: 0;">
+    <table width="600" style="margin: 20px auto; font-family: Arial, sans-serif; border-collapse: collapse;">
+        <tr>
+            <td style="background-color: #d9534f; padding: 20px; color: #fff; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0; font-size: 20px;">&#128680; Aviso Final — Suspensión Inminente</h1>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 30px; background-color: #f9f9f9; border: 1px solid #ddd;">
+                <p>Hola <strong><t t-out="object.partner_id.name or 'Cliente'"/></strong>,</p>
+
+                <p>Tu suscripción lleva <strong>más de 3 días con pago pendiente</strong>.
+                Si no regularizas el pago hoy, tu instancia de Odoo será
+                <strong>suspendida mañana</strong> y no podrás acceder a ella.</p>
+
+                <div style="background-color: #fdf2f2; border-left: 4px solid #d9534f;
+                             padding: 15px; margin: 20px 0;">
+                    <strong>Tu acceso a <t t-out="object.url"/> será bloqueado en menos de 24 horas.</strong>
+                </div>
+
+                <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
+                    <tr style="background-color: #f0f0f0;">
+                        <td style="padding: 8px; font-weight: bold; width: 40%;">Instancia:</td>
+                        <td style="padding: 8px;"><t t-out="object.name"/></td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Plan:</td>
+                        <td style="padding: 8px;"><t t-out="(object.plan or 'starter').capitalize()"/></td>
+                    </tr>
+                </table>
+
+                <p style="text-align: center; margin: 30px 0;">
+                    <a t-attf-href="/my/subscriptions/{{ object.subscription_id.id }}"
+                       style="background-color: #d9534f; color: #fff; padding: 14px 32px;
+                              border-radius: 5px; text-decoration: none; font-weight: bold; font-size: 16px;">
+                        Pagar ahora y mantener mi acceso
+                    </a>
+                </p>
+
+                <p>Una vez realizado el pago, tu instancia se reactivará automáticamente.</p>
+
+                <p>Saludos,<br/><strong>AEI Software</strong></p>
+            </td>
+        </tr>
+        <tr>
+            <td style="background-color: #555; padding: 12px; color: #aaa; text-align: center;
+                        font-size: 12px; border-radius: 0 0 8px 8px;">
+                Este es un mensaje automático de la plataforma SaaS.
+            </td>
+        </tr>
+    </table>
+</div>
+            </field>
+        </record>
+
+        <!-- ── Dunning Level 3: Suspended (+5 days) ──────────────────────────── -->
+        <record id="email_template_dunning_level3" model="mail.template">
+            <field name="name">SaaS: Instancia Suspendida — Pago Requerido (Nivel 3)</field>
+            <field name="model_id" ref="odoo_k8s_saas.model_saas_instance"/>
+            <field name="subject">Tu instancia de Odoo ha sido suspendida — {{ object.name }}</field>
+            <field name="email_from">{{ object.env.company.email_formatted }}</field>
+            <field name="email_to">{{ object.partner_id.email_formatted }}</field>
+            <field name="auto_delete" eval="True"/>
+            <field name="body_html" type="html">
+<div style="margin: 0; padding: 0;">
+    <table width="600" style="margin: 20px auto; font-family: Arial, sans-serif; border-collapse: collapse;">
+        <tr>
+            <td style="background-color: #555; padding: 20px; color: #fff; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0; font-size: 20px;">Instancia Suspendida</h1>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 30px; background-color: #f9f9f9; border: 1px solid #ddd;">
+                <p>Hola <strong><t t-out="object.partner_id.name or 'Cliente'"/></strong>,</p>
+
+                <p>Debido a un pago pendiente de más de 5 días, tu instancia de Odoo
+                <strong><t t-out="object.name"/></strong> ha sido <strong>suspendida</strong>.
+                El acceso a <t t-out="object.url"/> no está disponible temporalmente.</p>
+
+                <div style="background-color: #f5f5f5; border: 1px solid #ddd;
+                             padding: 20px; margin: 20px 0; text-align: center;">
+                    <p style="font-size: 18px; margin: 0;"><strong>&#128274; Servicio suspendido</strong></p>
+                    <p style="color: #666; margin: 10px 0 0 0;">
+                        Tus datos están seguros. Reactivaremos tu instancia en minutos una vez que recibamos el pago.
+                    </p>
+                </div>
+
+                <p style="text-align: center; margin: 30px 0;">
+                    <a t-attf-href="/my/subscriptions/{{ object.subscription_id.id }}"
+                       style="background-color: #875A7B; color: #fff; padding: 14px 32px;
+                              border-radius: 5px; text-decoration: none; font-weight: bold; font-size: 16px;">
+                        Pagar y reactivar mi instancia
+                    </a>
+                </p>
+
+                <p><small>Tus datos se conservan de forma segura durante 7 días adicionales.
+                Después de ese período, la instancia podrá ser eliminada definitivamente.</small></p>
+
+                <p>Si crees que esto es un error o necesitas ayuda, responde a este mensaje.</p>
+
+                <p>Saludos,<br/><strong>AEI Software</strong></p>
+            </td>
+        </tr>
+        <tr>
+            <td style="background-color: #555; padding: 12px; color: #aaa; text-align: center;
+                        font-size: 12px; border-radius: 0 0 8px 8px;">
+                Este es un mensaje automático de la plataforma SaaS.
+            </td>
+        </tr>
+    </table>
+</div>
+            </field>
+        </record>
+
+    </data>
+</odoo>

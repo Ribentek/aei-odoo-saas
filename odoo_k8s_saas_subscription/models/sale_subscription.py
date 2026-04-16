@@ -200,13 +200,30 @@ class SaleSubscription(models.Model):
             "res_id": instance.id,
         }
 
-    # ── Stage-change hooks ──────────────────────────────────────
     # ── Stage-change and Template-change hooks ────────────────────────────────
     def write(self, vals):
-        """Detect stage_id and template_id changes and trigger SaaS actions."""
+        """Detect stage_id, template_id, and recurring_next_date changes and trigger SaaS actions."""
         old_stages = {rec.id: rec.stage_id.id for rec in self}
         old_templates = {rec.id: rec.template_id.id for rec in self}
+        old_next_dates = {rec.id: rec.recurring_next_date for rec in self}
         res = super().write(vals)
+
+        # Reset dunning level when recurring_next_date advances (payment received)
+        if "recurring_next_date" in vals:
+            for rec in self:
+                old_date = old_next_dates.get(rec.id)
+                if rec.recurring_next_date and old_date and rec.recurring_next_date > old_date:
+                    instances = self.env["saas.instance"].search([
+                        ("subscription_id", "=", rec.id),
+                        ("dunning_level", ">", 0),
+                    ])
+                    if instances:
+                        instances.write({"dunning_level": 0, "dunning_last_sent": False})
+                        logger.info(
+                            "write(): reset dunning_level for %d instance(s) on "
+                            "subscription %s (recurring_next_date advanced %s → %s)",
+                            len(instances), rec.display_name, old_date, rec.recurring_next_date,
+                        )
 
         # Handle template_id change (Upgrades)
         if "template_id" in vals:
@@ -362,17 +379,24 @@ class SaleSubscription(models.Model):
                             inst.tenant_id, rec.display_name,
                         )
 
-            # → Closed: suspend all non-deleted instances safely instead of deleting
+            # → Closed: suspend instances and record closed_date for grace-period tracking
             elif stage_closed and new_stage_id == stage_closed.id:
-                to_delete = instances.filtered(
+                to_suspend = instances.filtered(
                     lambda i: i.state in ("draft", "provisioning", "ready", "suspended")
                 )
-                if to_delete:
+                if to_suspend:
                     logger.info(
-                        "Subscription %s → Closed: marking %d instance(s) FOR SUSPENSION to prevent data loss",
-                        rec.display_name, len(to_delete),
+                        "Subscription %s → Closed: suspending %d instance(s) "
+                        "(data retained for grace period before deletion)",
+                        rec.display_name, len(to_suspend),
                     )
-                    to_delete.action_stop()
+                    to_suspend.action_stop()
+                    # Record when the subscription closed so the grace-period cron
+                    # can calculate when to proceed to deletion.
+                    now = fields.Datetime.now()
+                    for inst in to_suspend:
+                        if not inst.closed_date:
+                            inst.closed_date = now
 
         return res
 
@@ -393,23 +417,53 @@ class SaleSubscription(models.Model):
             categ = categ.parent_id
         return False
 
+    def _send_dunning_email(self, inst, level: int):
+        """Send a dunning notification email at the given escalation level (1, 2, or 3)."""
+        xml_ids = {
+            1: "odoo_k8s_saas_subscription.email_template_dunning_level1",
+            2: "odoo_k8s_saas_subscription.email_template_dunning_level2",
+            3: "odoo_k8s_saas_subscription.email_template_dunning_level3",
+        }
+        xml_id = xml_ids.get(level)
+        if not xml_id:
+            return
+        template = self.env.ref(xml_id, raise_if_not_found=False)
+        if not template:
+            logger.warning("_send_dunning_email: template %s not found", xml_id)
+            return
+        try:
+            template.send_mail(inst.id, force_send=True)
+            inst.write({
+                "dunning_level": level,
+                "dunning_last_sent": fields.Date.today(),
+            })
+            logger.info(
+                "Dunning level %d email sent for instance %s (subscription %s)",
+                level, inst.tenant_id,
+                inst.subscription_id.display_name if inst.subscription_id else "?",
+            )
+        except Exception:
+            logger.exception(
+                "Failed to send dunning level %d email for instance %s",
+                level, inst.tenant_id,
+            )
+
     @api.model
     def _cron_suspend_overdue(self):
-        """Cron: suspend instances whose subscription is past-due.
+        """Cron: escalating dunning sequence for overdue subscriptions.
 
-        Finds subscriptions that are:
-        - Not in a closed stage
-        - Have exceeded their next invoice date (overdue payment)
-        - Have an active (ready) linked instance
+        Sends warning emails before suspension rather than suspending immediately.
+        Dunning timeline (days overdue):
+          +1 day  → level 1 email: "Payment overdue, pay within 3 days"
+          +3 days → level 2 email: "Final warning, suspension tomorrow"
+          +5 days → level 3 email + actual suspension
 
-        Calls action_stop() on each overdue instance to scale it to 0.
+        dunning_level resets to 0 when recurring_next_date advances (payment received).
         """
         stage_closed = self.env.ref(_STAGE_CLOSED, raise_if_not_found=False)
         today = fields.Date.today()
 
-        domain = [
-            ("recurring_next_date", "<", today),
-        ]
+        domain = [("recurring_next_date", "<", today)]
         if stage_closed:
             domain.append(("stage_id", "!=", stage_closed.id))
 
@@ -417,29 +471,52 @@ class SaleSubscription(models.Model):
         logger.info("_cron_suspend_overdue: checking %d overdue subscriptions", len(overdue_subs))
 
         for sub in overdue_subs:
+            days_overdue = (today - sub.recurring_next_date).days
             instances = self.env["saas.instance"].search([
                 ("subscription_id", "=", sub.id),
-                ("state", "=", "ready"),
+                ("state", "in", ("ready", "suspended")),
             ])
             for inst in instances:
-                logger.info(
-                    "Suspending instance %s (subscription %s overdue since %s)",
-                    inst.tenant_id, sub.display_name, sub.recurring_next_date,
-                )
-                try:
-                    inst.action_stop()
-                except Exception:
-                    logger.exception(
-                        "Failed to suspend overdue instance %s", inst.tenant_id
+                if days_overdue >= 5 and inst.dunning_level < 3:
+                    # Suspend + send level-3 notification
+                    logger.info(
+                        "Suspending instance %s (%d days overdue, dunning→3)",
+                        inst.tenant_id, days_overdue,
                     )
+                    if inst.state == "ready":
+                        try:
+                            inst.action_stop()
+                        except Exception:
+                            logger.exception("Failed to suspend overdue instance %s", inst.tenant_id)
+                    self._send_dunning_email(inst, level=3)
+
+                elif days_overdue >= 3 and inst.dunning_level < 2:
+                    logger.info(
+                        "Dunning level 2 for instance %s (%d days overdue)",
+                        inst.tenant_id, days_overdue,
+                    )
+                    self._send_dunning_email(inst, level=2)
+
+                elif days_overdue >= 1 and inst.dunning_level < 1:
+                    logger.info(
+                        "Dunning level 1 for instance %s (%d days overdue)",
+                        inst.tenant_id, days_overdue,
+                    )
+                    self._send_dunning_email(inst, level=1)
 
     @api.model
     def _cron_sync_closed_subscriptions(self):
-        """Safety net cron: delete any instance still active on a Closed subscription.
+        """Safety net cron: enforce suspension and grace-period deletion on Closed subscriptions.
 
-        Runs hourly. Catches cases where the write() stage-change hook was bypassed
-        (e.g., portal API was down, bulk SQL update, or exception during transition).
+        Runs hourly. Two responsibilities:
+        1. Catch any instances still running on a Closed subscription that the write() hook
+           may have missed (e.g., portal API was down, bulk SQL update, exception).
+           → Suspends them immediately and records closed_date.
+        2. Permanently delete instances whose grace period has elapsed.
+           → Grace period: SAAS_GRACE_PERIOD_DAYS env var (default 7 days).
         """
+        import datetime
+
         stage_closed = self.env.ref(_STAGE_CLOSED, raise_if_not_found=False)
         if not stage_closed:
             logger.warning(
@@ -448,10 +525,14 @@ class SaleSubscription(models.Model):
             )
             return
 
+        grace_days = int(os.getenv("SAAS_GRACE_PERIOD_DAYS", "7"))
+        grace_cutoff = fields.Datetime.now() - datetime.timedelta(days=grace_days)
+
         closed_subs = self.search([("stage_id", "=", stage_closed.id)])
         logger.info(
-            "_cron_sync_closed_subscriptions: checking %d closed subscriptions",
-            len(closed_subs),
+            "_cron_sync_closed_subscriptions: checking %d closed subscriptions "
+            "(grace period: %d days)",
+            len(closed_subs), grace_days,
         )
 
         for sub in closed_subs:
@@ -459,13 +540,53 @@ class SaleSubscription(models.Model):
                 ("subscription_id", "=", sub.id),
                 ("state", "not in", ["deleted", "pending_delete"]),
             ])
-            if instances:
-                logger.warning(
-                    "_cron_sync_closed: %d active instance(s) found on "
-                    "closed subscription %s — marking for deletion.",
-                    len(instances), sub.display_name,
-                )
-                instances.action_request_delete()
+            if not instances:
+                continue
+
+            now = fields.Datetime.now()
+            for inst in instances:
+                # Step 1: Ensure the instance is suspended
+                if inst.state in ("draft", "provisioning", "ready"):
+                    logger.warning(
+                        "_cron_sync_closed: instance %s still active on closed "
+                        "subscription %s — suspending now.",
+                        inst.tenant_id, sub.display_name,
+                    )
+                    try:
+                        inst.action_stop()
+                    except Exception:
+                        logger.exception(
+                            "_cron_sync_closed: failed to suspend %s", inst.tenant_id
+                        )
+
+                # Backfill closed_date if missing (e.g., instances closed before this feature)
+                if not inst.closed_date:
+                    inst.closed_date = now
+                    logger.info(
+                        "_cron_sync_closed: backfilled closed_date for %s", inst.tenant_id
+                    )
+                    continue  # Give at least one full grace period from now
+
+                # Step 2: Delete if grace period has elapsed
+                if inst.closed_date <= grace_cutoff:
+                    logger.info(
+                        "_cron_sync_closed: grace period expired for %s "
+                        "(closed %s, cutoff %s) — marking for deletion.",
+                        inst.tenant_id, inst.closed_date, grace_cutoff,
+                    )
+                    try:
+                        inst.action_request_delete()
+                    except Exception:
+                        logger.exception(
+                            "_cron_sync_closed: failed to request deletion of %s",
+                            inst.tenant_id,
+                        )
+                else:
+                    days_left = (inst.closed_date - grace_cutoff).days
+                    logger.info(
+                        "_cron_sync_closed: instance %s suspended, %d day(s) left in grace period.",
+                        inst.tenant_id, days_left,
+                    )
 
     @api.model
     def _cron_sync_user_count(self):
