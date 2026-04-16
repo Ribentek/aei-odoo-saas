@@ -5,6 +5,7 @@ REST API for tenant lifecycle.
 Avoids any S3/boto3/Ceph — state is embedded in K8s objects.
 """
 from __future__ import annotations
+import asyncio
 import base64
 import logging
 import os
@@ -606,16 +607,16 @@ def _drop_pg_user(pg_user: str, db_name: str) -> None:
 async def download_backup(tenant_id: str):
     """Stream a complete Odoo backup (DB + filestore ZIP) for a tenant.
 
-    Reads the tenant's master password from its K8s Secret and calls
-    the tenant's internal /web/database/backup endpoint, which works
-    regardless of list_db setting. Returns a streaming ZIP to the caller
-    (typically the Odoo admin portal acting as a proxy for the customer).
+    Uses kubectl exec to run dump_db directly inside the tenant pod,
+    bypassing the list_db=False restriction that blocks the HTTP and
+    XML-RPC backup endpoints in Odoo 18. Outputs base64-encoded ZIP
+    via stdout, decoded and streamed back to the caller.
     """
     if not re.match(r"^[a-z0-9][a-z0-9\-]{0,46}[a-z0-9]$", tenant_id):
         raise HTTPException(status_code=422, detail="Invalid tenant_id format")
     namespace = f"odoo-{tenant_id}"
 
-    # ── Retrieve admin_passwd from K8s Secret ─────────────────────────────
+    # ── Retrieve secret (for validation only — exec uses pod's own config) ─
     from k8s_utils.client import _core
     try:
         secret = _core().read_namespaced_secret("odoo-secret", namespace)
@@ -625,56 +626,92 @@ async def download_backup(tenant_id: str):
             raise HTTPException(status_code=404, detail=f"Instance '{tenant_id}' not found")
         raise HTTPException(status_code=500, detail=f"Cannot read K8s secret: {exc}")
 
-    admin_passwd = base64.b64decode(secret.data.get("ADMIN_PASSWD", "")).decode()
-    if not admin_passwd:
+    if not secret.data.get("ADMIN_PASSWD"):
         raise HTTPException(status_code=500, detail="admin_passwd not found in secret")
 
+    # ── Find a running pod ────────────────────────────────────────────────
+    try:
+        pods = _core().list_namespaced_pod(namespace, label_selector="app=odoo")
+        running = [p for p in pods.items if p.status.phase == "Running"]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Cannot list pods: {exc}")
+    if not running:
+        raise HTTPException(status_code=503, detail=f"Instance '{tenant_id}' has no running pods (may be suspended)")
+    pod_name = running[0].metadata.name
+
     db_name = f"odoo_{tenant_id}"
-    odoo_url = f"http://odoo.{namespace}.svc.cluster.local:8069"
     date_str = datetime.now().strftime("%Y-%m-%d")
     filename = f"{tenant_id}-backup-{date_str}.zip"
 
-    # ── Initiate streaming request to tenant Odoo ─────────────────────────
-    client = httpx.AsyncClient(timeout=httpx.Timeout(connect=15.0, read=600.0, write=30.0, pool=5.0))
+    # ── Build the Python one-liner to exec inside the pod ─────────────────
+    # Patches list_db=True in-process (no config file change) so that
+    # dump_db's @if_db_mgt_enabled decorator allows the call.
+    python_cmd = (
+        "import sys,base64,io;"
+        "sys.path.insert(0,'/opt/odoo');"
+        "import odoo;"
+        "from odoo.tools import config;"
+        "config.parse_config(['--config=/etc/odoo/odoo.conf']);"
+        "config['list_db']=True;"
+        "from odoo.service.db import dump_db;"
+        "buf=io.BytesIO();"
+        f"dump_db('{db_name}',buf,'zip');"
+        "sys.stdout.buffer.write(base64.b64encode(buf.getvalue()));"
+        "sys.stdout.buffer.flush()"
+    )
+
+    # ── Execute inside pod via kubernetes stream (synchronous — run in thread)
+    def _exec_backup() -> tuple[bytes, str]:
+        from kubernetes.stream import stream as k8s_stream
+        resp = k8s_stream(
+            _core().connect_get_namespaced_pod_exec,
+            pod_name, namespace,
+            command=["python3", "-c", python_cmd],
+            container="odoo",
+            stderr=True, stdin=False, stdout=True, tty=False,
+            _preload_content=False,
+        )
+        stdout_chunks: list[bytes] = []
+        stderr_chunks: list[str] = []
+        while resp.is_open():
+            resp.update(timeout=600)
+            if resp.peek_stdout():
+                chunk = resp.read_stdout()
+                stdout_chunks.append(chunk if isinstance(chunk, bytes) else chunk.encode())
+            if resp.peek_stderr():
+                stderr_chunks.append(resp.read_stderr())
+        resp.close()
+        return b"".join(stdout_chunks), "".join(stderr_chunks)
+
     try:
-        req = client.build_request(
-            "POST",
-            f"{odoo_url}/web/database/backup",
-            data={
-                "master_pwd": admin_passwd,
-                "name": db_name,
-                "backup_format": "zip",
-            },
-        )
-        resp = await client.send(req, stream=True)
-    except httpx.ConnectError:
-        await client.aclose()
-        raise HTTPException(status_code=503, detail=f"Instance '{tenant_id}' is not reachable (may be suspended)")
-    except httpx.TimeoutException:
-        await client.aclose()
-        raise HTTPException(status_code=504, detail="Backup timed out — database may be too large")
+        b64_bytes, stderr_out = await asyncio.to_thread(_exec_backup)
     except Exception as exc:
-        await client.aclose()
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=500, detail=f"Backup exec failed: {exc}")
 
-    if resp.status_code != 200:
-        body = await resp.aread()
-        await client.aclose()
+    if not b64_bytes:
         raise HTTPException(
-            status_code=502,
-            detail=f"Odoo backup endpoint returned {resp.status_code}: {body[:200].decode(errors='replace')}",
+            status_code=500,
+            detail=f"Backup produced no output. stderr: {stderr_out[:400]}",
         )
 
-    async def stream_and_close():
-        try:
-            async for chunk in resp.aiter_bytes(chunk_size=1024 * 1024):
-                yield chunk
-        finally:
-            await resp.aclose()
-            await client.aclose()
+    try:
+        zip_data = base64.b64decode(b64_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Backup output is not valid base64: {exc}")
+
+    if zip_data[:4] != b"PK\x03\x04":
+        raise HTTPException(
+            status_code=500,
+            detail=f"Backup produced invalid ZIP (magic={zip_data[:4]!r}). stderr: {stderr_out[:200]}",
+        )
+
+    async def stream_zip():
+        chunk_size = 1024 * 1024  # 1 MB chunks
+        for i in range(0, len(zip_data), chunk_size):
+            yield zip_data[i : i + chunk_size]
 
     return StreamingResponse(
-        stream_and_close(),
+        stream_zip(),
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
