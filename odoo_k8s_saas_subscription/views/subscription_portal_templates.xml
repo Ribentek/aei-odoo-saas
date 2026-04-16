@@ -472,7 +472,7 @@
 
                 <!-- Action buttons (only for active subscriptions) -->
                 <t t-set="stage_name" t-value="subscription.stage_id.name or ''"/>
-                <t t-if="'progress' in stage_name.lower() or 'activ' in stage_name.lower() or 'curso' in stage_name.lower()">
+                <t t-if="'progress' in stage_name.lower() or 'progreso' in stage_name.lower() or 'activ' in stage_name.lower() or 'curso' in stage_name.lower()">
                     <div class="d-flex gap-2 flex-wrap">
 
                         <!-- Upgrade/Downgrade plan -->
