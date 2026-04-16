@@ -1,0 +1,422 @@
+# =============================================================================
+# k8s/10-pg-observability.yaml
+#
+# Conecta Prometheus (kube-prom-stack) a los exporters que ya corren en los
+# 3 nodos PostgreSQL HA externos (VMs fuera del cluster K3s).
+#
+# Exporters en cada nodo (ya instalados y activos):
+#   :9100  — node_exporter  (métricas de sistema)
+#   :9187  — postgres_exporter (métricas de PostgreSQL)
+#   :8008  — Patroni REST API  (estado cluster HA)
+#
+# IPs internas del cluster:
+#   aei_postgresql-1  192.168.0.127
+#   aei_postgresql-2  192.168.0.186
+#   aei_postgresql-3  192.168.0.226
+#
+# Uso:
+#   kubectl apply -f k8s/10-pg-observability.yaml
+#
+# Verificar:
+#   kubectl get svc,endpoints -n monitoring -l app.kubernetes.io/component=pg-ha
+#   # En Prometheus UI → Status → Targets → buscar "pg-"
+# =============================================================================
+
+# ─── 1. node_exporter — métricas de sistema de los nodos PG ────────────────
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-node-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: node-exporter
+    app.kubernetes.io/component: pg-ha
+    app: pg-node-exporter
+spec:
+  clusterIP: None          # headless — sin proxy, acceso directo a los IPs
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: pg-node-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: node-exporter
+    app.kubernetes.io/component: pg-ha
+subsets:
+  - addresses:
+      - ip: 192.168.0.127
+        nodeName: aei-postgresql-1
+      - ip: 192.168.0.186
+        nodeName: aei-postgresql-2
+      - ip: 192.168.0.226
+        nodeName: aei-postgresql-3
+    ports:
+      - name: metrics
+        port: 9100
+        protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pg-node-exporter
+  namespace: monitoring
+  labels:
+    release: kube-prom          # debe coincidir con el selector del Prometheus CR
+    app.kubernetes.io/component: pg-ha
+spec:
+  selector:
+    matchLabels:
+      app: pg-node-exporter
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scheme: http
+      relabelings:
+        # Añade label "node" con el nodeName del endpoint
+        - action: replace
+          sourceLabels: [__meta_kubernetes_endpoint_node_name]
+          targetLabel: node
+        # Añade label "job" descriptivo
+        - action: replace
+          targetLabel: job
+          replacement: pg-node-exporter
+
+---
+# ─── 2. postgres_exporter — métricas de PostgreSQL ─────────────────────────
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-postgres-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: postgres-exporter
+    app.kubernetes.io/component: pg-ha
+    app: pg-postgres-exporter
+spec:
+  clusterIP: None
+  ports:
+    - name: metrics
+      port: 9187
+      targetPort: 9187
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: pg-postgres-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: postgres-exporter
+    app.kubernetes.io/component: pg-ha
+subsets:
+  - addresses:
+      - ip: 192.168.0.127
+        nodeName: aei-postgresql-1
+      - ip: 192.168.0.186
+        nodeName: aei-postgresql-2
+      - ip: 192.168.0.226
+        nodeName: aei-postgresql-3
+    ports:
+      - name: metrics
+        port: 9187
+        protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pg-postgres-exporter
+  namespace: monitoring
+  labels:
+    release: kube-prom
+    app.kubernetes.io/component: pg-ha
+spec:
+  selector:
+    matchLabels:
+      app: pg-postgres-exporter
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scheme: http
+      relabelings:
+        - action: replace
+          sourceLabels: [__meta_kubernetes_endpoint_node_name]
+          targetLabel: node
+        - action: replace
+          targetLabel: job
+          replacement: pg-postgres-exporter
+
+---
+# ─── 3. Patroni REST API — estado del cluster HA ───────────────────────────
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-patroni
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: patroni
+    app.kubernetes.io/component: pg-ha
+    app: pg-patroni
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 8008
+      targetPort: 8008
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: pg-patroni
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: patroni
+    app.kubernetes.io/component: pg-ha
+subsets:
+  - addresses:
+      - ip: 192.168.0.127
+        nodeName: aei-postgresql-1
+      - ip: 192.168.0.186
+        nodeName: aei-postgresql-2
+      - ip: 192.168.0.226
+        nodeName: aei-postgresql-3
+    ports:
+      - name: http
+        port: 8008
+        protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pg-patroni
+  namespace: monitoring
+  labels:
+    release: kube-prom
+    app.kubernetes.io/component: pg-ha
+spec:
+  selector:
+    matchLabels:
+      app: pg-patroni
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scheme: http
+      relabelings:
+        - action: replace
+          sourceLabels: [__meta_kubernetes_endpoint_node_name]
+          targetLabel: node
+        - action: replace
+          targetLabel: job
+          replacement: pg-patroni
+
+---
+# ─── 4. Alertas PostgreSQL HA ──────────────────────────────────────────────
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pg-ha-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prom
+    app.kubernetes.io/component: pg-ha
+spec:
+  groups:
+    - name: pg-ha.availability
+      interval: 30s
+      rules:
+
+        - alert: PostgreSQLDown
+          expr: pg_up == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: postgresql
+          annotations:
+            summary: "PostgreSQL DOWN en {{ $labels.node }}"
+            description: "postgres_exporter no puede conectar al servidor PostgreSQL en {{ $labels.instance }}. Verificar Patroni y el proceso postgres."
+
+        - alert: PatroniNodeDown
+          expr: |
+            up{job="pg-patroni"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: patroni
+          annotations:
+            summary: "Nodo Patroni inaccesible: {{ $labels.node }}"
+            description: "La API REST de Patroni en {{ $labels.instance }} no responde. El nodo puede estar caído o desconectado del cluster."
+
+        - alert: PatroniNoLeader
+          expr: |
+            count(patroni_master == 1) < 1
+          for: 2m
+          labels:
+            severity: critical
+            component: patroni
+          annotations:
+            summary: "Cluster Patroni sin líder"
+            description: "Ningún nodo reporta ser líder (patroni_master=1). Puede haber un split-brain o todos los nodos en replica."
+
+    - name: pg-ha.replication
+      interval: 30s
+      rules:
+
+        - alert: PostgreSQLReplicationLag
+          expr: |
+            pg_replication_lag > 30
+          for: 5m
+          labels:
+            severity: warning
+            component: replication
+          annotations:
+            summary: "Lag de replicación alto en {{ $labels.node }}"
+            description: "El lag de replicación en {{ $labels.instance }} es {{ $value | humanizeDuration }}. Threshold: 30s."
+
+        - alert: PostgreSQLReplicationLagCritical
+          expr: |
+            pg_replication_lag > 120
+          for: 2m
+          labels:
+            severity: critical
+            component: replication
+          annotations:
+            summary: "Lag de replicación CRITICO en {{ $labels.node }}"
+            description: "El lag de replicación en {{ $labels.instance }} es {{ $value | humanizeDuration }}. Riesgo de pérdida de datos."
+
+        - alert: PostgreSQLTooFewReplicas
+          expr: |
+            count(pg_stat_replication_pg_current_wal_lsn_diff) < 2
+          for: 5m
+          labels:
+            severity: warning
+            component: replication
+          annotations:
+            summary: "Menos de 2 réplicas activas"
+            description: "Solo {{ $value }} réplica(s) activa(s). El cluster espera 2 réplicas (3 nodos total)."
+
+    - name: pg-ha.connections
+      interval: 30s
+      rules:
+
+        - alert: PostgreSQLConnectionsSaturated
+          expr: |
+            sum by (node) (pg_stat_activity_count)
+            /
+            pg_settings_max_connections
+            > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            component: connections
+          annotations:
+            summary: "Conexiones PostgreSQL al {{ $value | humanizePercentage }} en {{ $labels.node }}"
+            description: "El pool de conexiones en {{ $labels.instance }} supera el 85%. max_connections=800. Revisar PgBouncer."
+
+        - alert: PostgreSQLConnectionsCritical
+          expr: |
+            sum by (node) (pg_stat_activity_count)
+            /
+            pg_settings_max_connections
+            > 0.95
+          for: 2m
+          labels:
+            severity: critical
+            component: connections
+          annotations:
+            summary: "Conexiones PostgreSQL CRITICAS en {{ $labels.node }}"
+            description: "El pool de conexiones en {{ $labels.instance }} supera el 95%. Nuevas conexiones serán rechazadas."
+
+    - name: pg-ha.performance
+      interval: 60s
+      rules:
+
+        - alert: PostgreSQLLongRunningQuery
+          expr: |
+            max by (node) (
+              pg_stat_activity_max_tx_duration{state="active"}
+            ) > 300
+          for: 0m
+          labels:
+            severity: warning
+            component: performance
+          annotations:
+            summary: "Query larga en {{ $labels.node }} ({{ $value | humanizeDuration }})"
+            description: "Hay al menos una transacción activa en {{ $labels.instance }} corriendo por más de 5 minutos. Puede indicar un lock o un query sin optimizar."
+
+        - alert: PostgreSQLDeadlocks
+          expr: |
+            rate(pg_stat_database_deadlocks[5m]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: performance
+          annotations:
+            summary: "Deadlocks detectados en {{ $labels.node }}"
+            description: "Se detectaron deadlocks en la DB {{ $labels.datname }} en {{ $labels.instance }}."
+
+    - name: pg-ha.storage
+      interval: 60s
+      rules:
+
+        - alert: PostgreSQLTableBloat
+          expr: |
+            pg_stat_user_tables_n_dead_tup > 500000
+          for: 30m
+          labels:
+            severity: info
+            component: storage
+          annotations:
+            summary: "Bloat alto en tabla {{ $labels.relname }} ({{ $labels.node }})"
+            description: "La tabla {{ $labels.schemaname }}.{{ $labels.relname }} tiene {{ $value | humanize }} tuplas muertas. Considerar VACUUM."
+
+        - alert: PGNodeDiskSpaceLow
+          expr: |
+            (
+              node_filesystem_avail_bytes{job="pg-node-exporter", mountpoint="/"}
+              /
+              node_filesystem_size_bytes{job="pg-node-exporter", mountpoint="/"}
+            ) < 0.15
+          for: 5m
+          labels:
+            severity: warning
+            component: storage
+          annotations:
+            summary: "Disco bajo en nodo PG {{ $labels.node }}"
+            description: "El filesystem raíz en {{ $labels.instance }} tiene menos del 15% libre. PostgreSQL puede fallar si el disco se llena."
+
+        - alert: PGNodeDiskSpaceCritical
+          expr: |
+            (
+              node_filesystem_avail_bytes{job="pg-node-exporter", mountpoint="/"}
+              /
+              node_filesystem_size_bytes{job="pg-node-exporter", mountpoint="/"}
+            ) < 0.05
+          for: 1m
+          labels:
+            severity: critical
+            component: storage
+          annotations:
+            summary: "Disco CRITICO en nodo PG {{ $labels.node }}"
+            description: "El filesystem raíz en {{ $labels.instance }} tiene menos del 5% libre. ACCION INMEDIATA requerida."

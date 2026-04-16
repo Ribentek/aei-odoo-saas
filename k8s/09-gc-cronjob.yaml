@@ -28,6 +28,7 @@ spec:
                 - |
                   set -e
                   PORTAL="http://portal.aeisoftware.svc.cluster.local:8000"
+
                   echo "=== PV GC: listing Released PVs ==="
                   curl -sf -H "X-API-Key: ${API_KEY}" "${PORTAL}/api/v1/gc/pvs"
                   echo ""
@@ -35,6 +36,15 @@ spec:
                   curl -sf -X DELETE -H "X-API-Key: ${API_KEY}" "${PORTAL}/api/v1/gc/pvs"
                   echo ""
                   echo "=== PV GC: done ==="
+
+                  echo ""
+                  echo "=== DB GC: listing orphaned databases ==="
+                  curl -sf -H "X-API-Key: ${API_KEY}" "${PORTAL}/api/v1/gc/dbs"
+                  echo ""
+                  echo "=== DB GC: dropping orphaned databases ==="
+                  curl -sf -X DELETE -H "X-API-Key: ${API_KEY}" "${PORTAL}/api/v1/gc/dbs"
+                  echo ""
+                  echo "=== DB GC: done ==="
               env:
                 - name: API_KEY
                   valueFrom:
