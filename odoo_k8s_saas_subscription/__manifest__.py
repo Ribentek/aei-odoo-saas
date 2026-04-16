@@ -1,6 +1,6 @@
 {
     'name': 'Odoo K8s SaaS — Subscription Bridge',
-    'version': '18.0.1.5.0',
+    'version': '18.0.1.6.0',
     'summary': 'Links subscription_oca lifecycle to SaaS instance provisioning',
     'category': 'Technical',
     'author': 'AEI Software',

@@ -121,6 +121,53 @@ class SaleSubscription(models.Model):
             action["res_id"] = instances.id
         return action
 
+    def action_portal_cancel(self):
+        """Cancel the subscription from the customer portal.
+
+        Moves the subscription to the Closed stage, triggering the existing
+        write() hook that suspends linked instances and records closed_date.
+        Must be called via sudo() from a controller that has already validated
+        the portal user's ownership of this subscription.
+        """
+        self.ensure_one()
+        stage_closed = self.env.ref(_STAGE_CLOSED, raise_if_not_found=False)
+        if not stage_closed:
+            raise UserError(_("Cannot cancel: Closed stage not configured."))
+        stage_in_progress = self.env.ref(_STAGE_IN_PROGRESS, raise_if_not_found=False)
+        if stage_in_progress and self.stage_id.id != stage_in_progress.id:
+            raise UserError(
+                _("Only active subscriptions can be cancelled. "
+                  "Current stage: %s") % self.stage_id.name
+            )
+        self.write({"stage_id": stage_closed.id})
+        logger.info(
+            "action_portal_cancel: subscription %s cancelled by portal user", self.display_name
+        )
+
+    def action_portal_upgrade(self, new_template_id: int):
+        """Change the subscription plan from the customer portal.
+
+        Validates that the new template is a SaaS plan and is different from
+        the current one. The existing write() hook on template_id change handles
+        the K8s resource update (CPU/RAM/workers) automatically.
+        Must be called via sudo() from a controller that has already validated
+        the portal user's ownership of this subscription.
+        """
+        self.ensure_one()
+        new_template = self.env["sale.subscription.template"].sudo().browse(new_template_id)
+        if not new_template.exists():
+            raise UserError(_("Plan not found."))
+        if not getattr(new_template, "is_saas_plan", False):
+            raise UserError(_("Invalid plan selected."))
+        if new_template.id == self.template_id.id:
+            raise UserError(_("Already on plan: %s") % new_template.name)
+        old_plan = self.template_id.name if self.template_id else "?"
+        self.write({"template_id": new_template_id})
+        logger.info(
+            "action_portal_upgrade: subscription %s changed from '%s' to '%s' by portal user",
+            self.display_name, old_plan, new_template.name,
+        )
+
     def action_reprovision_instance(self):
         """Re-create and provision a saas.instance when the old one was deleted."""
         self.ensure_one()

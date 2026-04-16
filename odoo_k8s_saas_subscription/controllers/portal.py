@@ -3,13 +3,22 @@ controllers/portal.py
 
 Customer portal for subscriptions — /my/subscriptions list + detail.
 Follows the same pattern as contract.controllers.main.PortalContract.
+
+Self-service actions (POST routes, require auth=user):
+  POST /my/subscriptions/<id>/cancel           — cancel subscription
+  GET  /my/subscriptions/<id>/upgrade          — upgrade confirmation page
+  POST /my/subscriptions/<id>/upgrade          — confirm plan change
 """
+import logging
+
 from odoo import _, http
-from odoo.exceptions import AccessError, MissingError
+from odoo.exceptions import AccessError, MissingError, UserError
 from odoo.http import request
 
 from odoo.addons.portal.controllers.portal import CustomerPortal
 from odoo.addons.portal.controllers.portal import pager as portal_pager
+
+logger = logging.getLogger(__name__)
 
 
 class PortalSubscription(CustomerPortal):
@@ -136,6 +145,94 @@ class PortalSubscription(CustomerPortal):
         values = self._subscription_get_page_view_values(
             sub_sudo, access_token, **kw
         )
+        # Pass available SaaS plan templates (excluding current) for the upgrade UI
+        values["saas_templates"] = request.env["sale.subscription.template"].sudo().search([
+            ("is_saas_plan", "=", True),
+            ("id", "!=", sub_sudo.template_id.id),
+        ])
+        values["cancelled"] = kw.get("cancelled") == "1"
+        values["upgraded"] = kw.get("upgraded") == "1"
         return request.render(
             "odoo_k8s_saas_subscription.portal_subscription_page", values
         )
+
+    # ── Self-service: Cancel ─────────────────────────────────────────
+    @http.route(
+        ["/my/subscriptions/<int:subscription_id>/cancel"],
+        type="http",
+        auth="user",
+        website=True,
+        methods=["POST"],
+    )
+    def portal_cancel_subscription(self, subscription_id, access_token=None, **kw):
+        """Cancel the subscription — moves to Closed, triggers suspension."""
+        try:
+            sub_sudo = self._document_check_access(
+                "sale.subscription", subscription_id, access_token
+            )
+        except (AccessError, MissingError):
+            return request.redirect("/my")
+
+        try:
+            sub_sudo.action_portal_cancel()
+        except UserError as e:
+            logger.warning("portal_cancel_subscription: %s", e)
+        return request.redirect(f"/my/subscriptions/{subscription_id}?cancelled=1")
+
+    # ── Self-service: Upgrade confirmation page ──────────────────────
+    @http.route(
+        ["/my/subscriptions/<int:subscription_id>/upgrade"],
+        type="http",
+        auth="user",
+        website=True,
+        methods=["GET"],
+    )
+    def portal_upgrade_plan_page(self, subscription_id, access_token=None, **kw):
+        """Show a plan comparison and confirmation page before upgrading."""
+        try:
+            sub_sudo = self._document_check_access(
+                "sale.subscription", subscription_id, access_token
+            )
+        except (AccessError, MissingError):
+            return request.redirect("/my")
+
+        saas_templates = request.env["sale.subscription.template"].sudo().search([
+            ("is_saas_plan", "=", True),
+            ("id", "!=", sub_sudo.template_id.id),
+        ])
+        return request.render(
+            "odoo_k8s_saas_subscription.portal_upgrade_confirmation",
+            {
+                "subscription": sub_sudo,
+                "saas_templates": saas_templates,
+                "page_name": "Subscriptions",
+            },
+        )
+
+    # ── Self-service: Upgrade confirm (POST) ─────────────────────────
+    @http.route(
+        ["/my/subscriptions/<int:subscription_id>/upgrade"],
+        type="http",
+        auth="user",
+        website=True,
+        methods=["POST"],
+    )
+    def portal_upgrade_plan_confirm(
+        self, subscription_id, access_token=None, new_template_id=None, **kw
+    ):
+        """Execute the plan change after the user confirms."""
+        try:
+            sub_sudo = self._document_check_access(
+                "sale.subscription", subscription_id, access_token
+            )
+        except (AccessError, MissingError):
+            return request.redirect("/my")
+
+        if not new_template_id:
+            return request.redirect(f"/my/subscriptions/{subscription_id}/upgrade")
+
+        try:
+            sub_sudo.action_portal_upgrade(int(new_template_id))
+        except (UserError, ValueError) as e:
+            logger.warning("portal_upgrade_plan_confirm: %s", e)
+        return request.redirect(f"/my/subscriptions/{subscription_id}?upgraded=1")

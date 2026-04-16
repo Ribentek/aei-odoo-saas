@@ -455,6 +455,84 @@
                 </div>
             </div>
 
+            <!-- Self-service Actions -->
+            <div id="subscription_actions" class="mt-4">
+
+                <!-- Success banners -->
+                <div t-if="cancelled" class="alert alert-success">
+                    <i class="fa fa-check-circle me-2"/>
+                    <strong>Suscripción cancelada.</strong>
+                    Tu instancia será suspendida y los datos conservados durante 7 días.
+                </div>
+                <div t-if="upgraded" class="alert alert-success">
+                    <i class="fa fa-check-circle me-2"/>
+                    <strong>Plan actualizado correctamente.</strong>
+                    Los nuevos recursos se aplicarán en los próximos minutos.
+                </div>
+
+                <!-- Action buttons (only for active subscriptions) -->
+                <t t-set="stage_name" t-value="subscription.stage_id.name or ''"/>
+                <t t-if="'progress' in stage_name.lower() or 'activ' in stage_name.lower() or 'curso' in stage_name.lower()">
+                    <div class="d-flex gap-2 flex-wrap">
+
+                        <!-- Upgrade/Downgrade plan -->
+                        <t t-if="saas_templates">
+                            <a t-attf-href="/my/subscriptions/{{ subscription.id }}/upgrade"
+                               class="btn btn-outline-primary">
+                                <i class="fa fa-arrow-up me-1"/>
+                                Cambiar plan
+                            </a>
+                        </t>
+
+                        <!-- Cancel subscription — opens confirmation modal -->
+                        <button type="button" class="btn btn-outline-danger"
+                                data-bs-toggle="modal" data-bs-target="#cancelModal">
+                            <i class="fa fa-times-circle me-1"/>
+                            Cancelar suscripción
+                        </button>
+                    </div>
+
+                    <!-- Cancel confirmation modal -->
+                    <div class="modal fade" id="cancelModal" tabindex="-1" aria-labelledby="cancelModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header bg-danger text-white">
+                                    <h5 class="modal-title" id="cancelModalLabel">
+                                        <i class="fa fa-exclamation-triangle me-2"/>
+                                        Confirmar cancelación
+                                    </h5>
+                                    <button type="button" class="btn-close btn-close-white"
+                                            data-bs-dismiss="modal" aria-label="Close"/>
+                                </div>
+                                <div class="modal-body">
+                                    <p>¿Estás seguro de que deseas cancelar la suscripción
+                                    <strong><t t-esc="subscription.name"/></strong>?</p>
+                                    <ul class="text-muted small">
+                                        <li>Tu instancia de Odoo será <strong>suspendida</strong> inmediatamente.</li>
+                                        <li>Los datos se conservarán durante <strong>7 días</strong>.</li>
+                                        <li>Después del período de gracia, la instancia se eliminará definitivamente.</li>
+                                        <li>Esta acción no puede deshacerse.</li>
+                                    </ul>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary"
+                                            data-bs-dismiss="modal">Mantener suscripción</button>
+                                    <form t-attf-action="/my/subscriptions/{{ subscription.id }}/cancel"
+                                          method="POST" class="d-inline">
+                                        <input type="hidden" name="csrf_token"
+                                               t-att-value="request.csrf_token()"/>
+                                        <button type="submit" class="btn btn-danger">
+                                            <i class="fa fa-times-circle me-1"/>
+                                            Sí, cancelar
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+            </div>
+
             <!-- Chatter / Communication -->
             <div id="subscription_communication" class="mt-4">
                 <h2>Communication</h2>
@@ -464,6 +542,85 @@
                     <t t-set="pid" t-value="pid" />
                     <t t-set="hash" t-value="hash" />
                 </t>
+            </div>
+        </t>
+    </template>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         /my/subscriptions/<id>/upgrade — Plan change confirmation
+         ═══════════════════════════════════════════════════════════ -->
+    <template id="portal_upgrade_confirmation" name="Upgrade Plan Confirmation">
+        <t t-call="portal.portal_layout">
+            <h5 class="mb-3">Cambiar plan — <t t-esc="subscription.name"/></h5>
+
+            <!-- Current plan card -->
+            <div class="card mb-4 border-primary">
+                <div class="card-header bg-primary text-white">
+                    <strong>Plan actual</strong>
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title"><t t-esc="subscription.template_id.name"/></h5>
+                    <div class="row text-muted small">
+                        <div class="col-4">
+                            <strong>Usuarios incluidos</strong><br/>
+                            <t t-esc="subscription.template_id.included_users"/>
+                        </div>
+                        <div class="col-4">
+                            <strong>Extra por usuario</strong><br/>
+                            <span t-field="subscription.template_id.price_per_extra_user"
+                                  t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>/mes
+                        </div>
+                        <div class="col-4">
+                            <strong>Almacenamiento</strong><br/>
+                            <t t-esc="subscription.template_id.storage_gi"/> GB
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Available plans -->
+            <h6 class="mb-3">Selecciona el nuevo plan:</h6>
+            <div class="row g-3">
+                <t t-foreach="saas_templates" t-as="tmpl">
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div class="card h-100">
+                            <div class="card-header text-center">
+                                <strong><t t-esc="tmpl.name"/></strong>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-unstyled small text-muted">
+                                    <li><i class="fa fa-users me-2"/>
+                                        <t t-esc="tmpl.included_users"/> usuarios incluidos</li>
+                                    <li><i class="fa fa-hdd-o me-2"/>
+                                        <t t-esc="tmpl.storage_gi"/> GB almacenamiento</li>
+                                    <li><i class="fa fa-plus me-2"/>
+                                        <span t-field="tmpl.price_per_extra_user"
+                                              t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>/usuario extra/mes</li>
+                                </ul>
+                            </div>
+                            <div class="card-footer text-center">
+                                <form t-attf-action="/my/subscriptions/{{ subscription.id }}/upgrade"
+                                      method="POST">
+                                    <input type="hidden" name="csrf_token"
+                                           t-att-value="request.csrf_token()"/>
+                                    <input type="hidden" name="new_template_id"
+                                           t-att-value="tmpl.id"/>
+                                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                                        <i class="fa fa-check me-1"/>
+                                        Cambiar a este plan
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+            </div>
+
+            <div class="mt-4">
+                <a t-attf-href="/my/subscriptions/{{ subscription.id }}"
+                   class="btn btn-outline-secondary">
+                    <i class="fa fa-arrow-left me-1"/> Volver
+                </a>
             </div>
         </t>
     </template>

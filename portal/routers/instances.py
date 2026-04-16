@@ -9,16 +9,82 @@ import logging
 import os
 import secrets
 import string
+import threading
 
+import httpx
 import psycopg2
 from psycopg2 import sql
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, field_validator
 import re
 
 from k8s_utils.manifests import all_manifests, PLAN_RESOURCES, BASE_DOMAIN, URL_SCHEME, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_PORT_PRIMARY, GIT_TOKEN
 from k8s_utils.client import apply_manifest, delete_namespace, get_deployment_status
 from metrics import record_operation, record_error
+
+# ── Odoo webhook push config ──────────────────────────────────────────────────
+# Imported from main.py env vars; kept here for router-level access.
+_ODOO_WEBHOOK_URL = os.getenv("ODOO_WEBHOOK_URL", "")
+_ODOO_WEBHOOK_KEY = os.getenv("ODOO_WEBHOOK_KEY", "")
+
+
+def _fire_webhook(tenant_id: str, status: str) -> None:
+    """Push a status change to Odoo via webhook (best-effort, non-blocking).
+
+    Called from background threads — never raises. If ODOO_WEBHOOK_URL is not
+    set, the call is skipped and the 2-minute cron handles reconciliation.
+    """
+    if not _ODOO_WEBHOOK_URL or not _ODOO_WEBHOOK_KEY:
+        return
+    try:
+        resp = httpx.post(
+            _ODOO_WEBHOOK_URL,
+            json={"tenant_id": tenant_id, "status": status},
+            headers={"X-Webhook-Key": _ODOO_WEBHOOK_KEY, "Content-Type": "application/json"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            logger.info("webhook: pushed status=%s for %s → 200 OK", status, tenant_id)
+        else:
+            logger.warning(
+                "webhook: push for %s returned %d: %s",
+                tenant_id, resp.status_code, resp.text[:200],
+            )
+    except Exception as exc:
+        logger.warning("webhook: failed to push status=%s for %s: %s", status, tenant_id, exc)
+
+
+def _poll_until_ready_then_notify(tenant_id: str) -> None:
+    """Background thread: poll K8s until the instance is ready, then fire webhook.
+
+    Polls every 15 seconds for up to 20 minutes (80 attempts).
+    This eliminates the 0-2 minute delay from the Odoo reconciliation cron.
+    """
+    import time
+    max_attempts = 80  # 80 × 15s = 20 minutes
+    interval = 15
+
+    logger.info("webhook-poller: watching %s for readiness", tenant_id)
+    for attempt in range(max_attempts):
+        time.sleep(interval)
+        try:
+            info = get_deployment_status(f"odoo-{tenant_id}")
+            if info["phase"] == "NotFound":
+                logger.warning("webhook-poller: namespace for %s disappeared", tenant_id)
+                _fire_webhook(tenant_id, "error")
+                return
+            if info.get("ready"):
+                logger.info(
+                    "webhook-poller: %s is ready after %d polls — firing webhook",
+                    tenant_id, attempt + 1,
+                )
+                _fire_webhook(tenant_id, "ready")
+                return
+        except Exception as exc:
+            logger.warning("webhook-poller: error checking %s: %s", tenant_id, exc)
+
+    logger.warning("webhook-poller: %s did not become ready in %d min", tenant_id, max_attempts * interval // 60)
+    _fire_webhook(tenant_id, "error")
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -126,7 +192,7 @@ def check_availability(tenant_id: str):
 
 
 @router.post("", response_model=InstanceResponse, status_code=202)
-def create_instance(req: CreateInstanceRequest):
+def create_instance(req: CreateInstanceRequest, background_tasks: BackgroundTasks):
     """
     Provision a new Odoo tenant.
     1. Creates a dedicated Postgres role + database.
@@ -177,6 +243,18 @@ def create_instance(req: CreateInstanceRequest):
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     record_operation("provision")
+
+    # Launch background poller: fires webhook when pod becomes ready.
+    # Uses a daemon thread so it doesn't block the response or prevent shutdown.
+    if _ODOO_WEBHOOK_URL:
+        t = threading.Thread(
+            target=_poll_until_ready_then_notify,
+            args=(req.tenant_id,),
+            daemon=True,
+            name=f"webhook-poller-{req.tenant_id}",
+        )
+        t.start()
+
     return InstanceResponse(
         tenant_id=req.tenant_id,
         namespace=f"odoo-{req.tenant_id}",
@@ -220,6 +298,7 @@ def delete_instance(tenant_id: str):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     record_operation("delete")
+    threading.Thread(target=_fire_webhook, args=(tenant_id, "deleted"), daemon=True).start()
     # Drop Postgres user and database (best-effort; don't block the response)
     pg_user = f"odoo-{tenant_id}"
     db_name = f"odoo_{tenant_id}"
@@ -239,6 +318,7 @@ def stop_instance(tenant_id: str):
         record_error("stop", "k8s_error")
         raise HTTPException(status_code=500, detail=str(exc))
     record_operation("stop")
+    threading.Thread(target=_fire_webhook, args=(tenant_id, "stopped"), daemon=True).start()
     return {"status": "suspended"}
 
 @router.post("/{tenant_id}/start")
@@ -252,6 +332,7 @@ def start_instance(tenant_id: str):
         record_error("start", "k8s_error")
         raise HTTPException(status_code=500, detail=str(exc))
     record_operation("start")
+    threading.Thread(target=_fire_webhook, args=(tenant_id, "provisioning"), daemon=True).start()
     return {"status": "starting"}
 
 

@@ -26,6 +26,12 @@ logging.basicConfig(level=logging.INFO)
 API_KEY = os.getenv("API_KEY", "changeme")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
 
+# ── Odoo webhook config (push notifications portal→Odoo) ──────────────────────
+# Set ODOO_WEBHOOK_URL and ODOO_WEBHOOK_KEY in the portal deployment env vars.
+# If unset, webhook push is disabled; the 2-min reconciliation cron remains active.
+ODOO_WEBHOOK_URL = os.getenv("ODOO_WEBHOOK_URL", "")
+ODOO_WEBHOOK_KEY = os.getenv("ODOO_WEBHOOK_KEY", "")
+
 
 def verify_key(key: str = Security(api_key_header)):
     if key != API_KEY:
