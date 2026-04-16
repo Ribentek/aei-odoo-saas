@@ -74,4 +74,57 @@ app.include_router(
 
 @app.get("/healthz")
 def healthz():
+    """Liveness probe — confirms the process is alive. No dependency checks."""
     return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz():
+    """Readiness probe — verifies PG and K8s API are reachable.
+
+    Returns 503 if any dependency is down so K8s stops routing traffic
+    to this pod without restarting it.
+    """
+    import psycopg2
+    from kubernetes import client as k8s_client, config as k8s_config
+
+    checks: dict[str, str] = {}
+    failed = False
+
+    # ── PostgreSQL check ──────────────────────────────────────────────────────
+    try:
+        conn = psycopg2.connect(
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            dbname="postgres",
+            user=os.getenv("POSTGRES_ADMIN_USER", "postgres"),
+            password=os.getenv("POSTGRES_ADMIN_PASSWORD", ""),
+            connect_timeout=2,
+        )
+        conn.close()
+        checks["postgres"] = "ok"
+    except Exception as exc:
+        logger.warning("readyz: postgres check failed: %s", exc)
+        checks["postgres"] = f"error: {exc}"
+        failed = True
+
+    # ── Kubernetes API check ──────────────────────────────────────────────────
+    try:
+        try:
+            k8s_config.load_incluster_config()
+        except k8s_config.ConfigException:
+            k8s_config.load_kube_config()
+        k8s_client.CoreV1Api().list_namespace(limit=1, timeout_seconds=2)
+        checks["kubernetes"] = "ok"
+    except Exception as exc:
+        logger.warning("readyz: kubernetes check failed: %s", exc)
+        checks["kubernetes"] = f"error: {exc}"
+        failed = True
+
+    if failed:
+        return Response(
+            content=str({"status": "degraded", "checks": checks}),
+            status_code=503,
+            media_type="application/json",
+        )
+    return {"status": "ok", "checks": checks}

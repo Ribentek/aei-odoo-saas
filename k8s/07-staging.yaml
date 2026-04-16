@@ -333,10 +333,11 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: 8000
             initialDelaySeconds: 10
-            periodSeconds: 5
+            periodSeconds: 15
+            failureThreshold: 2
           resources:
             requests:
               cpu: 50m
