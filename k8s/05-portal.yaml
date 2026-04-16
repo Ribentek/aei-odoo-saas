@@ -47,7 +47,7 @@ spec:
       serviceAccountName: saas-portal
       containers:
         - name: portal
-          image: ghcr.io/jpvargassoruco/odoo-saas-mvp/portal:stable
+          image: ghcr.io/jpvargassoruco/odoo-saas-mvp/portal:main
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
