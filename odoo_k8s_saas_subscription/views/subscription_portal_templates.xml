@@ -17,8 +17,8 @@
                 <a
                     t-if="subscription"
                     t-attf-href="/my/subscriptions?{{ keep_query() }}"
-                >Subscriptions</a>
-                <t t-else="">Subscriptions</t>
+                >Mis Suscripciones</a>
+                <t t-else="">Mis Suscripciones</t>
             </li>
             <li t-if="subscription" class="breadcrumb-item active">
                 <t t-esc="subscription.name" />
@@ -38,7 +38,7 @@
         <div id="portal_client_category" position="inside">
             <t t-call="portal.portal_docs_entry">
                 <t t-set="icon" t-value="'/odoo_k8s_saas_subscription/static/src/img/subscription_icon.svg'" />
-                <t t-set="title">Subscriptions</t>
+                <t t-set="title">Mis Suscripciones</t>
                 <t t-set="url" t-value="'/my/subscriptions'" />
                 <t t-set="placeholder_count" t-value="'subscription_count'" />
                 <t t-set="show_count" t-value="True" />
@@ -47,66 +47,75 @@
     </template>
 
     <!-- ═══════════════════════════════════════════════════════════
-         /my/subscriptions — List view
+         /my/subscriptions — Vista de lista
          ═══════════════════════════════════════════════════════════ -->
-    <template id="portal_my_subscriptions" name="My Subscriptions">
+    <template id="portal_my_subscriptions" name="Mis Suscripciones">
         <t t-call="portal.portal_layout">
             <t t-set="breadcrumbs_searchbar" t-value="True" />
             <t t-call="portal.portal_searchbar">
-                <t t-set="title">Subscriptions</t>
+                <t t-set="title">Mis Suscripciones</t>
             </t>
-            <t t-if="subscriptions" t-call="portal.portal_table">
-                <thead>
-                    <tr class="active">
-                        <th>Subscription</th>
-                        <th class="d-none d-md-table-cell">Stage</th>
-                        <th class="d-none d-md-table-cell">Next Invoice</th>
-                        <th class="text-end">Recurring Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <t t-foreach="subscriptions" t-as="sub">
-                        <tr>
-                            <td>
-                                <a
-                                    t-att-href="sub.get_portal_url()"
-                                    t-att-title="sub.name"
-                                >
-                                    <t t-esc="sub.name" />
-                                </a>
-                            </td>
-                            <td class="d-none d-md-table-cell">
-                                <span
-                                    t-if="sub.stage_id"
-                                    class="badge rounded-pill text-bg-info"
-                                    t-esc="sub.stage_id.name"
-                                />
-                            </td>
-                            <td class="d-none d-md-table-cell">
-                                <span t-field="sub.recurring_next_date" />
-                            </td>
-                            <td class="text-end">
-                                <span
-                                    t-field="sub.recurring_total"
-                                    t-options='{"widget": "monetary", "display_currency": sub.currency_id}'
-                                />
-                            </td>
-                        </tr>
-                    </t>
-                </tbody>
+
+            <!-- Lista con datos -->
+            <t t-if="subscriptions">
+                <div class="table-responsive aei-subscriptions-table">
+                    <table class="table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Suscripción</th>
+                                <th class="d-none d-md-table-cell">Estado</th>
+                                <th class="d-none d-md-table-cell">Próxima Factura</th>
+                                <th class="text-end">Total Mensual</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-foreach="subscriptions" t-as="sub">
+                                <tr>
+                                    <td>
+                                        <a t-att-href="sub.get_portal_url()" t-att-title="sub.name">
+                                            <t t-esc="sub.name" />
+                                        </a>
+                                    </td>
+                                    <td class="d-none d-md-table-cell">
+                                        <span
+                                            t-if="sub.stage_id"
+                                            class="aei-badge aei-badge-stage"
+                                            t-esc="sub.stage_id.name"
+                                        />
+                                    </td>
+                                    <td class="d-none d-md-table-cell">
+                                        <span t-field="sub.recurring_next_date" />
+                                    </td>
+                                    <td class="text-end fw-semibold">
+                                        <span
+                                            t-field="sub.recurring_total"
+                                            t-options='{"widget": "monetary", "display_currency": sub.currency_id}'
+                                        />
+                                    </td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                </div>
             </t>
-            <p t-if="not subscriptions" class="text-muted">
-                There are currently no subscriptions for your account.
-            </p>
+
+            <!-- Estado vacío -->
+            <div t-if="not subscriptions" class="aei-empty-state mt-3">
+                <div class="aei-empty-icon">
+                    <i class="fa fa-cube"/>
+                </div>
+                <h6>Sin suscripciones activas</h6>
+                <p>Aún no tienes ningún plan contratado. Contacta con nuestro equipo para comenzar.</p>
+            </div>
         </t>
     </template>
 
     <!-- ═══════════════════════════════════════════════════════════
-         /my/subscriptions/<id> — Detail view
+         /my/subscriptions/<id> — Vista de detalle
          ═══════════════════════════════════════════════════════════ -->
-    <template id="portal_subscription_page" name="My Subscription">
+    <template id="portal_subscription_page" name="Mi Suscripción">
         <t t-call="portal.portal_layout">
-            <!-- Back-to-edit for internal users -->
+            <!-- Volver al backend (solo managers) -->
             <t groups="subscription_oca.group_subscription_oca_manager">
                 <t t-call="portal.portal_back_in_edit_mode">
                     <t
@@ -116,413 +125,406 @@
                 </t>
             </t>
 
-            <!-- Header -->
-            <h5 class="mb-0">
-                <span>
-                    Subscription —
+            <!-- ── Encabezado ───────────────────────────────────────── -->
+            <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+                <h5 class="mb-0">
                     <span t-field="subscription.name" />
-                </span>
+                </h5>
                 <span
                     t-if="subscription.stage_id"
-                    class="badge rounded-pill text-bg-info ms-2"
+                    class="aei-badge aei-badge-stage"
                     t-esc="subscription.stage_id.name"
                 />
-            </h5>
+            </div>
 
-            <div id="general_information">
-                <!-- Customer / Responsible -->
-                <div class="row mt-4">
-                    <div
-                        t-if="subscription.partner_id"
-                        class="col-12 col-md-6 mb-4 mb-md-0"
-                    >
-                        <h6><strong>Customer:</strong></h6>
-                        <div class="row">
-                            <div class="col flex-grow-0 pe-3">
-                                <img
-                                    t-if="subscription.partner_id.image_128"
-                                    class="rounded-circle mt-1 o_portal_contact_img"
-                                    t-att-src="image_data_uri(subscription.partner_id.image_128)"
-                                    alt="Contact"
-                                />
-                                <img
-                                    t-else=""
-                                    class="rounded-circle mt-1 o_portal_contact_img"
-                                    src="/web/static/src/img/user_menu_avatar.png"
-                                    alt="Contact"
-                                />
-                            </div>
-                            <div class="col ps-sm-0">
-                                <address
-                                    t-field="subscription.partner_id"
-                                    t-options='{"widget": "contact", "fields": ["name", "email", "phone"]}'
-                                />
-                            </div>
+            <!-- ── Tarjeta: Instancia SaaS (elemento principal) ───── -->
+            <div t-if="saas_instances" id="saas_instance_details" class="mb-4">
+                <t t-foreach="saas_instances" t-as="inst">
+                    <div class="aei-instance-card">
+                        <!-- Header oscuro con nombre y plan -->
+                        <div class="aei-instance-header">
+                            <span class="aei-instance-title">
+                                <i class="fa fa-server me-2"/>Tu Sistema Odoo
+                            </span>
+                            <span class="aei-plan-chip">
+                                <t t-esc="(inst.plan or 'starter').upper()"/>
+                            </span>
                         </div>
-                    </div>
-                    <div t-if="subscription.user_id" class="col-12 col-md-6">
-                        <h6><strong>Commercial Agent:</strong></h6>
-                        <div class="row">
-                            <div class="col flex-grow-0 pe-3">
-                                <img
-                                    t-if="subscription.user_id.image_128"
-                                    class="rounded-circle mt-1 o_portal_contact_img"
-                                    t-att-src="image_data_uri(subscription.user_id.image_128)"
-                                    alt="Contact"
-                                />
-                                <img
-                                    t-else=""
-                                    class="rounded-circle mt-1 o_portal_contact_img"
-                                    src="/web/static/src/img/user_menu_avatar.png"
-                                    alt="Contact"
-                                />
-                            </div>
-                            <div class="col ps-sm-0">
-                                <address
-                                    t-field="subscription.user_id"
-                                    t-options='{"widget": "contact", "fields": ["name", "email", "phone"]}'
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Subscription details -->
-                <div class="row mt-4" id="subscription_details">
-                    <div class="col-12 col-md-6 mb-4 mb-md-0">
-                        <div t-if="subscription.code" class="row mb-2 mb-sm-1">
-                            <div class="col-12 col-sm-4"><strong>Reference</strong></div>
-                            <div class="col-12 col-sm-8">
-                                <span t-field="subscription.code" />
-                            </div>
-                        </div>
-                        <div t-if="subscription.template_id" class="row mb-2 mb-sm-1">
-                            <div class="col-12 col-sm-4"><strong>Plan</strong></div>
-                            <div class="col-12 col-sm-8">
-                                <span t-field="subscription.template_id" />
-                            </div>
-                        </div>
-                        <div t-if="subscription.date_start" class="row mb-2 mb-sm-1">
-                            <div class="col-12 col-sm-4"><strong>Start Date</strong></div>
-                            <div class="col-12 col-sm-8">
-                                <span
-                                    t-field="subscription.date_start"
-                                    t-options='{"widget": "date"}'
-                                />
-                            </div>
-                        </div>
-                        <div t-if="subscription.recurring_next_date" class="row mb-2 mb-sm-1">
-                            <div class="col-12 col-sm-4"><strong>Next Invoice</strong></div>
-                            <div class="col-12 col-sm-8">
-                                <span
-                                    t-field="subscription.recurring_next_date"
-                                    t-options='{"widget": "date"}'
-                                />
-                            </div>
-                        </div>
-                        <div t-if="subscription.date" class="row mb-2 mb-sm-1">
-                            <div class="col-12 col-sm-4"><strong>End Date</strong></div>
-                            <div class="col-12 col-sm-8">
-                                <span
-                                    t-field="subscription.date"
-                                    t-options='{"widget": "date"}'
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- SaaS Instance(s) -->
-                <div t-if="saas_instances" id="saas_instance_details" class="mt-4">
-                    <h6><strong>Your SaaS Instance</strong></h6>
-                    <t t-foreach="saas_instances" t-as="inst">
-                        <div class="card mb-2">
-                            <div class="card-body py-2 px-3">
-                                <div class="row align-items-center">
-                                    <div class="col-12 col-md-4">
-                                        <small class="text-muted">Instance URL</small><br/>
+                        <!-- Cuerpo -->
+                        <div class="aei-instance-body">
+                            <div class="row align-items-center g-3">
+                                <!-- URL del sistema -->
+                                <div class="col-12 col-md-5">
+                                    <div class="aei-metric-label mb-1">URL de acceso</div>
+                                    <div class="aei-instance-url">
                                         <a t-if="inst.url and inst.state == 'ready'"
                                            t-att-href="inst.url"
                                            target="_blank"
-                                           class="fw-bold">
-                                            <i class="fa fa-external-link me-1"/>
+                                           rel="noopener noreferrer">
+                                            <i class="fa fa-external-link"/>
                                             <t t-esc="inst.url"/>
                                         </a>
                                         <span t-elif="inst.url" class="text-muted">
                                             <t t-esc="inst.url"/>
                                         </span>
                                         <span t-else="" class="text-muted fst-italic">
-                                            URL not yet assigned
+                                            URL en proceso de asignación…
                                         </span>
                                     </div>
-                                    <div class="col-6 col-md-3">
-                                        <small class="text-muted">Status</small><br/>
-                                        <span t-if="inst.state == 'ready'"
-                                              class="badge rounded-pill text-bg-success">
-                                            <i class="fa fa-check me-1"/>Ready
-                                        </span>
-                                        <span t-elif="inst.state == 'provisioning'"
-                                              class="badge rounded-pill text-bg-warning">
-                                            <i class="fa fa-spinner fa-spin me-1"/>Provisioning…
-                                        </span>
-                                        <span t-elif="inst.state == 'suspended'"
-                                              class="badge rounded-pill text-bg-secondary">
-                                            <i class="fa fa-pause me-1"/>Suspended
-                                        </span>
-                                        <span t-elif="inst.state == 'error'"
-                                              class="badge rounded-pill text-bg-danger">
-                                            <i class="fa fa-exclamation-triangle me-1"/>Error
-                                        </span>
-                                        <span t-else=""
-                                              class="badge rounded-pill text-bg-light">
-                                            <t t-esc="inst.state"/>
-                                        </span>
-                                    </div>
-                                    <div class="col-6 col-md-2">
-                                        <small class="text-muted">Plan</small><br/>
-                                        <span class="text-capitalize" t-esc="inst.plan"/>
-                                    </div>
-                                    <div class="col-12 col-md-3 text-md-end mt-2 mt-md-0">
-                                        <a t-if="inst.url and inst.state == 'ready'"
-                                           t-att-href="inst.url"
-                                           target="_blank"
-                                           class="btn btn-sm btn-primary">
-                                            <i class="fa fa-sign-in me-1"/>Open Instance
-                                        </a>
-                                    </div>
+                                </div>
+
+                                <!-- Estado -->
+                                <div class="col-6 col-md-3">
+                                    <div class="aei-metric-label mb-1">Estado</div>
+                                    <span t-if="inst.state == 'ready'"
+                                          class="aei-badge aei-badge-ready">
+                                        <i class="fa fa-check-circle"/>Activo
+                                    </span>
+                                    <span t-elif="inst.state == 'provisioning'"
+                                          class="aei-badge aei-badge-provisioning">
+                                        <span class="aei-spinner"/>Configurando
+                                    </span>
+                                    <span t-elif="inst.state == 'suspended'"
+                                          class="aei-badge aei-badge-suspended">
+                                        <i class="fa fa-pause-circle"/>Pausado
+                                    </span>
+                                    <span t-elif="inst.state == 'error'"
+                                          class="aei-badge aei-badge-error">
+                                        <i class="fa fa-exclamation-circle"/>Error
+                                    </span>
+                                    <span t-else=""
+                                          class="aei-badge aei-badge-suspended">
+                                        <t t-esc="inst.state"/>
+                                    </span>
+                                </div>
+
+                                <!-- Botón CTA -->
+                                <div class="col-12 col-md-4 text-md-end">
+                                    <a t-if="inst.url and inst.state == 'ready'"
+                                       t-att-href="inst.url"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="btn-aei-primary">
+                                        <i class="fa fa-sign-in"/>
+                                        Acceder al Sistema
+                                    </a>
+                                    <p t-elif="inst.state == 'provisioning'"
+                                       class="text-muted small mb-0">
+                                        <i class="fa fa-clock-o me-1"/>
+                                        Tu instancia está siendo configurada. Disponible en ~5 minutos.
+                                    </p>
                                 </div>
                             </div>
                         </div>
-                    </t>
-                </div>
+                    </div>
+                </t>
+            </div>
 
-                <!-- User Usage -->
-                <div t-if="subscription.template_id and subscription.template_id.included_users"
-                     id="user_billing_details" class="mt-4">
-                    <h6><strong>User Usage</strong></h6>
-                    <div class="card">
-                        <div class="card-body py-2 px-3">
-                            <div class="row">
-                                <div class="col-6 col-md-3">
-                                    <small class="text-muted">Current Users</small><br/>
-                                    <strong><t t-esc="subscription.current_user_count"/></strong>
-                                </div>
-                                <div class="col-6 col-md-3">
-                                    <small class="text-muted">Included in Plan</small><br/>
-                                    <span t-esc="subscription.template_id.included_users"/>
-                                </div>
-                                <div class="col-6 col-md-3">
-                                    <small class="text-muted">Extra Users</small><br/>
-                                    <span t-esc="subscription.extra_users"/>
-                                </div>
-                                <div class="col-6 col-md-3">
-                                    <small class="text-muted">Extra Charges</small><br/>
-                                    <span t-field="subscription.extra_users_amount"
-                                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
-                                </div>
+            <!-- ── Dos columnas: Contacto + Detalles ─────────────── -->
+            <div class="row g-4 mb-4">
+                <!-- Contacto -->
+                <div class="col-12 col-md-6">
+                    <div class="aei-detail-card h-100">
+                        <div class="aei-section-title">Información del Contrato</div>
+
+                        <div t-if="subscription.partner_id" class="aei-contact-block mb-3">
+                            <div class="aei-contact-label">Cliente</div>
+                            <div class="d-flex align-items-center gap-3">
+                                <img
+                                    t-if="subscription.partner_id.image_128"
+                                    class="rounded-circle o_portal_contact_img"
+                                    t-att-src="image_data_uri(subscription.partner_id.image_128)"
+                                    alt="Cliente"
+                                />
+                                <img
+                                    t-else=""
+                                    class="rounded-circle o_portal_contact_img"
+                                    src="/web/static/src/img/user_menu_avatar.png"
+                                    alt="Cliente"
+                                />
+                                <address
+                                    t-field="subscription.partner_id"
+                                    t-options='{"widget": "contact", "fields": ["name", "email", "phone"]}'
+                                    class="mb-0 small"
+                                />
+                            </div>
+                        </div>
+
+                        <div t-if="subscription.user_id" class="aei-contact-block">
+                            <div class="aei-contact-label">Asesor Comercial</div>
+                            <div class="d-flex align-items-center gap-3">
+                                <img
+                                    t-if="subscription.user_id.image_128"
+                                    class="rounded-circle o_portal_contact_img"
+                                    t-att-src="image_data_uri(subscription.user_id.image_128)"
+                                    alt="Asesor"
+                                />
+                                <img
+                                    t-else=""
+                                    class="rounded-circle o_portal_contact_img"
+                                    src="/web/static/src/img/user_menu_avatar.png"
+                                    alt="Asesor"
+                                />
+                                <address
+                                    t-field="subscription.user_id"
+                                    t-options='{"widget": "contact", "fields": ["name", "email", "phone"]}'
+                                    class="mb-0 small"
+                                />
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Estimated Next Invoice (shown only when extra users generate charges) -->
-                <div t-if="subscription.extra_users_amount"
-                     class="alert alert-info mt-3" id="estimated_next_invoice">
-                    <i class="fa fa-calculator me-1"/>
-                    <strong>Estimated Next Invoice:</strong>
-                    <span t-field="subscription.recurring_total"
-                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
-                    +
-                    <span t-field="subscription.extra_users_amount"
-                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
-                    (extra users) =
-                    <strong>
-                        <t t-esc="'%.2f' % (subscription.recurring_total + subscription.extra_users_amount)"/>
-                        <t t-esc="subscription.currency_id.symbol or 'Bs.'"/>
-                    </strong>
-                </div>
+                <!-- Detalles de la suscripción -->
+                <div class="col-12 col-md-6">
+                    <div class="aei-detail-card h-100">
+                        <div class="aei-section-title">Detalles de la Suscripción</div>
 
-                <!-- Line items table -->
-                <div id="item_details">
-                    <table class="table table-sm mt-4" id="subscription_lines_table">
-                        <thead class="bg-100">
-                            <tr>
-                                <th name="th_name" class="text-start">Description</th>
-                                <th name="th_quantity" class="text-end">Quantity</th>
-                                <th name="th_price_unit" class="text-end">Unit Price</th>
-                                <th name="th_discount" class="text-end">Discount (%)</th>
-                                <th name="th_price_subtotal" class="text-end">Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <t
-                                t-foreach="subscription.sale_subscription_line_ids"
-                                t-as="line"
-                            >
-                                <tr>
-                                    <td name="td_name">
-                                        <span t-field="line.name" />
-                                    </td>
-                                    <td name="td_quantity" class="text-end">
-                                        <span t-field="line.product_uom_qty" />
-                                    </td>
-                                    <td name="td_price_unit" class="text-end">
-                                        <span
-                                            t-field="line.price_unit"
-                                            t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'
-                                        />
-                                    </td>
-                                    <td name="td_discount" class="text-end">
-                                        <span t-field="line.discount" />
-                                    </td>
-                                    <td name="td_price_subtotal" class="text-end">
-                                        <span
-                                            t-field="line.price_subtotal"
-                                            t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'
-                                        />
-                                    </td>
-                                </tr>
-                            </t>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Totals -->
-                <div class="row justify-content-end mt-3">
-                    <div class="col-12 col-md-4">
-                        <table class="table table-sm">
-                            <tr>
-                                <td><strong>Recurring Total</strong></td>
-                                <td class="text-end">
-                                    <span
-                                        t-field="subscription.recurring_total"
-                                        t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'
-                                    />
-                                </td>
-                            </tr>
-                            <tr t-if="subscription.amount_tax">
-                                <td>Taxes</td>
-                                <td class="text-end">
-                                    <span
-                                        t-field="subscription.amount_tax"
-                                        t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'
-                                    />
-                                </td>
-                            </tr>
-                            <tr class="border-top">
-                                <td><strong>Total</strong></td>
-                                <td class="text-end">
-                                    <strong>
-                                        <span
-                                            t-field="subscription.amount_total"
-                                            t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'
-                                        />
-                                    </strong>
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Estimated next invoice (shows when extra users exist) -->
-                <div t-if="subscription.extra_users > 0" class="alert alert-warning mt-3 mb-0">
-                    <div class="row align-items-center">
-                        <div class="col-12 col-md-8">
-                            <i class="fa fa-exclamation-triangle me-1"/>
-                            <strong>You have <t t-esc="subscription.extra_users"/> user(s) beyond your plan.</strong>
-                            <br/>
-                            <small class="text-muted">
-                                Extra charge:
-                                <t t-esc="subscription.extra_users"/> users ×
-                                <span t-field="subscription.template_id.price_per_extra_user"
-                                      t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
-                                /user/month =
-                                <strong>
-                                    <span t-field="subscription.extra_users_amount"
-                                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
-                                </strong>
-                            </small>
+                        <div t-if="subscription.code" class="aei-detail-row">
+                            <span class="aei-label">Referencia</span>
+                            <span class="aei-value" t-field="subscription.code"/>
                         </div>
-                        <div class="col-12 col-md-4 text-md-end mt-2 mt-md-0">
-                            <small class="text-muted">Estimated next invoice:</small><br/>
-                            <strong class="fs-5">
-                                <t t-set="estimated_total" t-value="subscription.recurring_total + subscription.extra_users_amount"/>
-                                <t t-esc="'%.2f' % estimated_total"/>
-                                <t t-esc="subscription.currency_id.symbol"/>
-                            </strong>
+                        <div t-if="subscription.template_id" class="aei-detail-row">
+                            <span class="aei-label">Plan</span>
+                            <span class="aei-value" t-field="subscription.template_id"/>
+                        </div>
+                        <div t-if="subscription.date_start" class="aei-detail-row">
+                            <span class="aei-label">Fecha de inicio</span>
+                            <span class="aei-value"
+                                  t-field="subscription.date_start"
+                                  t-options='{"widget": "date"}'/>
+                        </div>
+                        <div t-if="subscription.recurring_next_date" class="aei-detail-row">
+                            <span class="aei-label">Próxima factura</span>
+                            <span class="aei-value"
+                                  t-field="subscription.recurring_next_date"
+                                  t-options='{"widget": "date"}'/>
+                        </div>
+                        <div t-if="subscription.date" class="aei-detail-row">
+                            <span class="aei-label">Fecha de fin</span>
+                            <span class="aei-value"
+                                  t-field="subscription.date"
+                                  t-options='{"widget": "date"}'/>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Self-service Actions -->
-            <div id="subscription_actions" class="mt-4">
-
-                <!-- Success banners -->
-                <div t-if="cancelled" class="alert alert-success">
-                    <i class="fa fa-check-circle me-2"/>
-                    <strong>Suscripción cancelada.</strong>
-                    Tu instancia será suspendida y los datos conservados durante 7 días.
+            <!-- ── Tarjeta de Usuarios Activos (Púrpura — Analytics) ── -->
+            <div t-if="subscription.template_id and subscription.template_id.included_users"
+                 id="user_billing_details" class="mb-4">
+                <div class="aei-users-card">
+                    <div class="aei-users-header">
+                        <i class="fa fa-users"/>
+                        Usuarios Activos
+                    </div>
+                    <div class="aei-users-body">
+                        <div class="row text-center g-0">
+                            <div class="col-6 col-md-3 py-2 border-end">
+                                <div class="aei-metric">
+                                    <span class="aei-metric-value">
+                                        <t t-esc="subscription.current_user_count"/>
+                                    </span>
+                                    <span class="aei-metric-label">Usuarios Actuales</span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3 py-2 border-end">
+                                <div class="aei-metric">
+                                    <span class="aei-metric-value">
+                                        <t t-esc="subscription.template_id.included_users"/>
+                                    </span>
+                                    <span class="aei-metric-label">Incluidos en Plan</span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3 py-2 border-end">
+                                <div class="aei-metric">
+                                    <span class="aei-metric-value aei-metric-extra">
+                                        <t t-esc="subscription.extra_users"/>
+                                    </span>
+                                    <span class="aei-metric-label">Usuarios Adicionales</span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3 py-2">
+                                <div class="aei-metric">
+                                    <span class="aei-metric-value aei-metric-extra">
+                                        <span t-field="subscription.extra_users_amount"
+                                              t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                                    </span>
+                                    <span class="aei-metric-label">Cargos Adicionales</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div t-if="upgraded" class="alert alert-success">
-                    <i class="fa fa-check-circle me-2"/>
-                    <strong>Plan actualizado correctamente.</strong>
-                    Los nuevos recursos se aplicarán en los próximos minutos.
+            </div>
+
+            <!-- ── Próxima factura estimada ────────────────────────── -->
+            <div t-if="subscription.extra_users > 0" class="aei-invoice-alert mb-4">
+                <div class="aei-invoice-text">
+                    <strong>
+                        <i class="fa fa-calculator me-2"/>
+                        Próxima Factura Estimada
+                    </strong>
+                    <div class="mt-1 text-muted small">
+                        Total recurrente +
+                        <t t-esc="subscription.extra_users"/> usuario(s) adicional(es) ×
+                        <span t-field="subscription.template_id.price_per_extra_user"
+                              t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>/usuario/mes
+                    </div>
+                </div>
+                <div class="aei-invoice-amount">
+                    <t t-set="estimated_total" t-value="subscription.recurring_total + subscription.extra_users_amount"/>
+                    <t t-esc="'%.2f' % estimated_total"/>
+                    <t t-esc="subscription.currency_id.symbol"/>
+                </div>
+            </div>
+
+            <!-- ── Servicios contratados ──────────────────────────── -->
+            <div id="item_details" class="mb-4">
+                <div class="aei-detail-card" style="padding: 0; overflow: hidden;">
+                    <div class="aei-section-title" style="padding: 16px 20px 10px; margin-bottom: 0;">
+                        Servicios Contratados
+                    </div>
+                    <div class="table-responsive">
+                        <table class="aei-lines-table table mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="text-start">Descripción</th>
+                                    <th class="text-end">Cantidad</th>
+                                    <th class="text-end">Precio Unitario</th>
+                                    <th class="text-end d-none d-md-table-cell">Descuento (%)</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="subscription.sale_subscription_line_ids" t-as="line">
+                                    <tr>
+                                        <td><span t-field="line.name"/></td>
+                                        <td class="text-end"><span t-field="line.product_uom_qty"/></td>
+                                        <td class="text-end">
+                                            <span t-field="line.price_unit"
+                                                  t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                                        </td>
+                                        <td class="text-end d-none d-md-table-cell">
+                                            <span t-field="line.discount"/>
+                                        </td>
+                                        <td class="text-end fw-semibold">
+                                            <span t-field="line.price_subtotal"
+                                                  t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                                        </td>
+                                    </tr>
+                                </t>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Totales ────────────────────────────────────────── -->
+            <div class="row justify-content-end mb-4">
+                <div class="col-12 col-md-4">
+                    <div class="aei-detail-card" style="padding: 16px 20px;">
+                        <table class="aei-totals-table table table-sm mb-0">
+                            <tr>
+                                <td class="text-muted">Total mensual recurrente</td>
+                                <td class="text-end">
+                                    <span t-field="subscription.recurring_total"
+                                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                                </td>
+                            </tr>
+                            <tr t-if="subscription.amount_tax">
+                                <td class="text-muted">Impuestos</td>
+                                <td class="text-end">
+                                    <span t-field="subscription.amount_tax"
+                                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                                </td>
+                            </tr>
+                            <tr class="aei-total-final">
+                                <td>Total</td>
+                                <td class="text-end">
+                                    <span t-field="subscription.amount_total"
+                                          t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Acciones de autoservicio ───────────────────────── -->
+            <div id="subscription_actions" class="mb-4">
+
+                <!-- Banners de éxito -->
+                <div t-if="cancelled" class="aei-alert-success mb-3">
+                    <i class="fa fa-check-circle fa-lg"/>
+                    <div>
+                        <strong>Suscripción cancelada.</strong>
+                        Tu instancia será suspendida y los datos conservados durante 7 días.
+                    </div>
+                </div>
+                <div t-if="upgraded" class="aei-alert-success mb-3">
+                    <i class="fa fa-check-circle fa-lg"/>
+                    <div>
+                        <strong>Plan actualizado correctamente.</strong>
+                        Los nuevos recursos se aplicarán en los próximos minutos.
+                    </div>
                 </div>
 
-                <!-- Action buttons (only for active subscriptions) -->
+                <!-- Botones (solo para suscripciones activas) -->
                 <t t-set="stage_name" t-value="subscription.stage_id.name or ''"/>
                 <t t-if="'progress' in stage_name.lower() or 'progreso' in stage_name.lower() or 'activ' in stage_name.lower() or 'curso' in stage_name.lower()">
-                    <div class="d-flex gap-2 flex-wrap">
+                    <div class="d-flex gap-3 flex-wrap">
 
-                        <!-- Upgrade/Downgrade plan -->
+                        <!-- Cambiar plan -->
                         <t t-if="saas_templates">
                             <a t-attf-href="/my/subscriptions/{{ subscription.id }}/upgrade"
-                               class="btn btn-outline-primary">
-                                <i class="fa fa-arrow-up me-1"/>
+                               class="btn-aei-outline">
+                                <i class="fa fa-arrow-up"/>
                                 Cambiar plan
                             </a>
                         </t>
 
-                        <!-- Backup download — only when instance is ready -->
+                        <!-- Descargar backup (solo cuando la instancia está lista) -->
                         <t t-foreach="saas_instances" t-as="inst">
                             <t t-if="inst.state == 'ready'">
                                 <a t-attf-href="/my/subscriptions/{{ subscription.id }}/backup"
-                                   class="btn btn-outline-secondary"
-                                   title="Descarga un ZIP con la base de datos y el filestore de tu instancia">
-                                    <i class="fa fa-download me-1"/>
+                                   class="btn-aei-outline"
+                                   title="Descarga un ZIP con la base de datos y los archivos adjuntos de tu instancia">
+                                    <i class="fa fa-download"/>
                                     Descargar backup
                                 </a>
                             </t>
                         </t>
 
-                        <!-- Cancel subscription — opens confirmation modal -->
-                        <button type="button" class="btn btn-outline-danger"
+                        <!-- Cancelar suscripción -->
+                        <button type="button" class="btn-aei-danger"
                                 data-bs-toggle="modal" data-bs-target="#cancelModal">
-                            <i class="fa fa-times-circle me-1"/>
+                            <i class="fa fa-times-circle"/>
                             Cancelar suscripción
                         </button>
                     </div>
 
-                    <!-- Cancel confirmation modal -->
-                    <div class="modal fade" id="cancelModal" tabindex="-1" aria-labelledby="cancelModalLabel" aria-hidden="true">
+                    <!-- Modal de confirmación de cancelación -->
+                    <div class="modal fade aei-modal" id="cancelModal" tabindex="-1"
+                         aria-labelledby="cancelModalLabel" aria-hidden="true">
                         <div class="modal-dialog">
                             <div class="modal-content">
-                                <div class="modal-header bg-danger text-white">
+                                <div class="modal-header">
                                     <h5 class="modal-title" id="cancelModalLabel">
                                         <i class="fa fa-exclamation-triangle me-2"/>
                                         Confirmar cancelación
                                     </h5>
                                     <button type="button" class="btn-close btn-close-white"
-                                            data-bs-dismiss="modal" aria-label="Close"/>
+                                            data-bs-dismiss="modal" aria-label="Cerrar"/>
                                 </div>
                                 <div class="modal-body">
-                                    <p>¿Estás seguro de que deseas cancelar la suscripción
+                                    <p class="mb-3">¿Deseas cancelar la suscripción
                                     <strong><t t-esc="subscription.name"/></strong>?</p>
-                                    <ul class="text-muted small">
-                                        <li>Tu instancia de Odoo será <strong>suspendida</strong> inmediatamente.</li>
+                                    <ul>
+                                        <li>Tu instancia será <strong>suspendida</strong> de inmediato.</li>
                                         <li>Los datos se conservarán durante <strong>7 días</strong>.</li>
-                                        <li>Después del período de gracia, la instancia se eliminará definitivamente.</li>
+                                        <li>Tras el período de gracia, la instancia se eliminará definitivamente.</li>
                                         <li>Esta acción no puede deshacerse.</li>
                                     </ul>
                                 </div>
@@ -549,66 +551,78 @@
     </template>
 
     <!-- ═══════════════════════════════════════════════════════════
-         /my/subscriptions/<id>/upgrade — Plan change confirmation
+         /my/subscriptions/<id>/upgrade — Cambio de plan
          ═══════════════════════════════════════════════════════════ -->
-    <template id="portal_upgrade_confirmation" name="Upgrade Plan Confirmation">
+    <template id="portal_upgrade_confirmation" name="Cambiar Plan">
         <t t-call="portal.portal_layout">
-            <h5 class="mb-3">Cambiar plan — <t t-esc="subscription.name"/></h5>
+            <h5 class="mb-4">
+                Cambiar plan —
+                <span class="text-muted fw-normal" t-esc="subscription.name"/>
+            </h5>
 
-            <!-- Current plan card -->
-            <div class="card mb-4 border-primary">
-                <div class="card-header bg-primary text-white">
-                    <strong>Plan actual</strong>
+            <!-- Plan actual -->
+            <div class="aei-current-plan-card mb-4">
+                <div class="aei-current-plan-label">
+                    <i class="fa fa-check-circle me-1"/>Plan actual
                 </div>
-                <div class="card-body">
-                    <h5 class="card-title"><t t-esc="subscription.template_id.name"/></h5>
-                    <div class="row text-muted small">
-                        <div class="col-4">
-                            <strong>Usuarios incluidos</strong><br/>
-                            <t t-esc="subscription.template_id.included_users"/>
-                        </div>
-                        <div class="col-4">
-                            <strong>Extra por usuario</strong><br/>
+                <div class="aei-current-plan-name">
+                    <t t-esc="subscription.template_id.name"/>
+                </div>
+                <div class="row g-3">
+                    <div class="col-4">
+                        <div class="aei-metric-label">Usuarios incluidos</div>
+                        <strong><t t-esc="subscription.template_id.included_users"/></strong>
+                    </div>
+                    <div class="col-4">
+                        <div class="aei-metric-label">Extra por usuario/mes</div>
+                        <strong>
                             <span t-field="subscription.template_id.price_per_extra_user"
-                                  t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>/mes
-                        </div>
-                        <div class="col-4">
-                            <strong>Almacenamiento</strong><br/>
-                            <t t-esc="subscription.template_id.storage_gi"/> GB
-                        </div>
+                                  t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                        </strong>
+                    </div>
+                    <div class="col-4">
+                        <div class="aei-metric-label">Almacenamiento</div>
+                        <strong><t t-esc="subscription.template_id.storage_gi"/> GB</strong>
                     </div>
                 </div>
             </div>
 
-            <!-- Available plans -->
-            <h6 class="mb-3">Selecciona el nuevo plan:</h6>
-            <div class="row g-3">
+            <!-- Planes disponibles -->
+            <h6 class="mb-3 fw-semibold">Selecciona el nuevo plan:</h6>
+            <div class="row g-4 mb-4">
                 <t t-foreach="saas_templates" t-as="tmpl">
                     <div class="col-12 col-md-6 col-lg-4">
-                        <div class="card h-100">
-                            <div class="card-header text-center">
-                                <strong><t t-esc="tmpl.name"/></strong>
+                        <div class="aei-plan-card">
+                            <div class="aei-plan-header">
+                                <div class="aei-plan-name"><t t-esc="tmpl.name"/></div>
                             </div>
-                            <div class="card-body">
-                                <ul class="list-unstyled small text-muted">
-                                    <li><i class="fa fa-users me-2"/>
-                                        <t t-esc="tmpl.included_users"/> usuarios incluidos</li>
-                                    <li><i class="fa fa-hdd-o me-2"/>
-                                        <t t-esc="tmpl.storage_gi"/> GB almacenamiento</li>
-                                    <li><i class="fa fa-plus me-2"/>
+                            <div class="aei-plan-body">
+                                <div class="aei-plan-feature">
+                                    <i class="fa fa-users"/>
+                                    <span><t t-esc="tmpl.included_users"/> usuarios incluidos</span>
+                                </div>
+                                <div class="aei-plan-feature">
+                                    <i class="fa fa-hdd-o"/>
+                                    <span><t t-esc="tmpl.storage_gi"/> GB almacenamiento</span>
+                                </div>
+                                <div class="aei-plan-feature">
+                                    <i class="fa fa-plus-circle"/>
+                                    <span>
                                         <span t-field="tmpl.price_per_extra_user"
-                                              t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>/usuario extra/mes</li>
-                                </ul>
+                                              t-options='{"widget": "monetary", "display_currency": subscription.currency_id}'/>
+                                        /usuario adicional/mes
+                                    </span>
+                                </div>
                             </div>
-                            <div class="card-footer text-center">
+                            <div class="aei-plan-footer">
                                 <form t-attf-action="/my/subscriptions/{{ subscription.id }}/upgrade"
                                       method="POST">
                                     <input type="hidden" name="csrf_token"
                                            t-att-value="request.csrf_token()"/>
                                     <input type="hidden" name="new_template_id"
                                            t-att-value="tmpl.id"/>
-                                    <button type="submit" class="btn btn-primary btn-sm w-100">
-                                        <i class="fa fa-check me-1"/>
+                                    <button type="submit" class="btn-aei-primary w-100 justify-content-center">
+                                        <i class="fa fa-check"/>
                                         Cambiar a este plan
                                     </button>
                                 </form>
@@ -618,12 +632,10 @@
                 </t>
             </div>
 
-            <div class="mt-4">
-                <a t-attf-href="/my/subscriptions/{{ subscription.id }}"
-                   class="btn btn-outline-secondary">
-                    <i class="fa fa-arrow-left me-1"/> Volver
-                </a>
-            </div>
+            <a t-attf-href="/my/subscriptions/{{ subscription.id }}"
+               class="btn-aei-outline">
+                <i class="fa fa-arrow-left"/> Volver
+            </a>
         </t>
     </template>
 </odoo>

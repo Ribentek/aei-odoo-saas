@@ -5,6 +5,9 @@
         <xpath expr="." position="inside">
             <script type="text/javascript"
                     src="/odoo_k8s_saas_subscription/static/src/js/cart_warning.js"/>
+            <!-- AEI Software brand identity — portal customer styles -->
+            <link rel="stylesheet" type="text/css"
+                  href="/odoo_k8s_saas_subscription/static/src/css/portal_aei.css"/>
         </xpath>
     </template>
 </odoo>
