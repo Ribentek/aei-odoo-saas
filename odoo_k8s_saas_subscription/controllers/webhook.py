@@ -103,23 +103,29 @@ class SaaSWebhookController(http.Controller):
 
         try:
             instance.write({"state": odoo_state})
-
-            # provisioning → ready: send credentials email immediately
-            if old_state == "provisioning" and odoo_state == "ready":
-                logger.info(
-                    "instance_status_webhook: %s is ready — sending credentials email",
-                    tenant_id,
-                )
-                instance.action_send_credentials_email()
-
-            logger.info(
-                "instance_status_webhook: %s state %s → %s",
-                tenant_id, old_state, odoo_state,
-            )
-            return {"ok": True, "state": odoo_state, "changed": True}
-
         except Exception as e:
             logger.exception(
-                "instance_status_webhook: failed to update instance %s", tenant_id
+                "instance_status_webhook: failed to write state for %s", tenant_id
             )
             return {"error": str(e), "status": 500}
+
+        logger.info(
+            "instance_status_webhook: %s state %s → %s",
+            tenant_id, old_state, odoo_state,
+        )
+
+        # provisioning → ready: send credentials email (best-effort, never rolls back the state write)
+        if old_state == "provisioning" and odoo_state == "ready":
+            logger.info(
+                "instance_status_webhook: %s is ready — sending credentials email",
+                tenant_id,
+            )
+            try:
+                instance.action_send_credentials_email()
+            except Exception:
+                logger.warning(
+                    "instance_status_webhook: credentials email failed for %s (state still updated)",
+                    tenant_id,
+                )
+
+        return {"ok": True, "state": odoo_state, "changed": True}

@@ -533,16 +533,6 @@
                 </t>
             </div>
 
-            <!-- Chatter / Communication -->
-            <div id="subscription_communication" class="mt-4">
-                <h2>Communication</h2>
-                <t t-call="portal.message_thread">
-                    <t t-set="object" t-value="subscription" />
-                    <t t-set="token" t-value="subscription.access_token" />
-                    <t t-set="pid" t-value="pid" />
-                    <t t-set="hash" t-value="hash" />
-                </t>
-            </div>
         </t>
     </template>
 
