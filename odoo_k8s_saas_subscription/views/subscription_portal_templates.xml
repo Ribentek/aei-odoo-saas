@@ -484,6 +484,18 @@
                             </a>
                         </t>
 
+                        <!-- Backup download — only when instance is ready -->
+                        <t t-foreach="saas_instances" t-as="inst">
+                            <t t-if="inst.state == 'ready'">
+                                <a t-attf-href="/my/subscriptions/{{ subscription.id }}/backup"
+                                   class="btn btn-outline-secondary"
+                                   title="Descarga un ZIP con la base de datos y el filestore de tu instancia">
+                                    <i class="fa fa-download me-1"/>
+                                    Descargar backup
+                                </a>
+                            </t>
+                        </t>
+
                         <!-- Cancel subscription — opens confirmation modal -->
                         <button type="button" class="btn btn-outline-danger"
                                 data-bs-toggle="modal" data-bs-target="#cancelModal">

@@ -5,16 +5,19 @@ REST API for tenant lifecycle.
 Avoids any S3/boto3/Ceph — state is embedded in K8s objects.
 """
 from __future__ import annotations
+import base64
 import logging
 import os
 import secrets
 import string
 import threading
+from datetime import datetime
 
 import httpx
 import psycopg2
 from psycopg2 import sql
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 import re
 
@@ -597,6 +600,83 @@ def _drop_pg_user(pg_user: str, db_name: str) -> None:
             logger.info("Dropped Postgres role/db for %s", pg_user)
     finally:
         conn.close()
+
+
+@router.get("/{tenant_id}/backup")
+async def download_backup(tenant_id: str):
+    """Stream a complete Odoo backup (DB + filestore ZIP) for a tenant.
+
+    Reads the tenant's master password from its K8s Secret and calls
+    the tenant's internal /web/database/backup endpoint, which works
+    regardless of list_db setting. Returns a streaming ZIP to the caller
+    (typically the Odoo admin portal acting as a proxy for the customer).
+    """
+    _validate_tenant_id(tenant_id)
+    namespace = f"odoo-{tenant_id}"
+
+    # ── Retrieve admin_passwd from K8s Secret ─────────────────────────────
+    from k8s_utils.client import _core
+    try:
+        secret = _core().read_namespaced_secret("odoo-secret", namespace)
+    except Exception as exc:
+        status = getattr(exc, "status", None)
+        if status == 404:
+            raise HTTPException(status_code=404, detail=f"Instance '{tenant_id}' not found")
+        raise HTTPException(status_code=500, detail=f"Cannot read K8s secret: {exc}")
+
+    admin_passwd = base64.b64decode(secret.data.get("ADMIN_PASSWD", "")).decode()
+    if not admin_passwd:
+        raise HTTPException(status_code=500, detail="admin_passwd not found in secret")
+
+    db_name = f"odoo_{tenant_id}"
+    odoo_url = f"http://odoo.{namespace}.svc.cluster.local:8069"
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    filename = f"{tenant_id}-backup-{date_str}.zip"
+
+    # ── Initiate streaming request to tenant Odoo ─────────────────────────
+    client = httpx.AsyncClient(timeout=httpx.Timeout(connect=15.0, read=600.0, write=30.0, pool=5.0))
+    try:
+        req = client.build_request(
+            "POST",
+            f"{odoo_url}/web/database/backup",
+            data={
+                "master_pwd": admin_passwd,
+                "name": db_name,
+                "backup_format": "zip",
+            },
+        )
+        resp = await client.send(req, stream=True)
+    except httpx.ConnectError:
+        await client.aclose()
+        raise HTTPException(status_code=503, detail=f"Instance '{tenant_id}' is not reachable (may be suspended)")
+    except httpx.TimeoutException:
+        await client.aclose()
+        raise HTTPException(status_code=504, detail="Backup timed out — database may be too large")
+    except Exception as exc:
+        await client.aclose()
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    if resp.status_code != 200:
+        body = await resp.aread()
+        await client.aclose()
+        raise HTTPException(
+            status_code=502,
+            detail=f"Odoo backup endpoint returned {resp.status_code}: {body[:200].decode(errors='replace')}",
+        )
+
+    async def stream_and_close():
+        try:
+            async for chunk in resp.aiter_bytes(chunk_size=1024 * 1024):
+                yield chunk
+        finally:
+            await resp.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        stream_and_close(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────

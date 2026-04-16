@@ -65,3 +65,11 @@ class SaasInstance(models.Model):
              "Used to enforce a grace period before permanent deletion.",
     )
 
+    # ── Self-service backup tracking ─────────────────────────────
+    last_backup_at = fields.Datetime(
+        string="Last Backup At",
+        readonly=True,
+        help="Timestamp of the last self-service backup downloaded by the customer. "
+             "Used to enforce a 24-hour rate limit.",
+    )
+

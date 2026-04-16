@@ -8,12 +8,18 @@ Self-service actions (POST routes, require auth=user):
   POST /my/subscriptions/<id>/cancel           — cancel subscription
   GET  /my/subscriptions/<id>/upgrade          — upgrade confirmation page
   POST /my/subscriptions/<id>/upgrade          — confirm plan change
+  GET  /my/subscriptions/<id>/backup           — download full backup (DB + filestore)
 """
 import logging
+import os
+from datetime import timedelta
+
+import requests as _requests
 
 from odoo import _, http
 from odoo.exceptions import AccessError, MissingError, UserError
-from odoo.http import request
+from odoo.fields import Datetime as OdooDatetime
+from odoo.http import request, Response
 
 from odoo.addons.portal.controllers.portal import CustomerPortal
 from odoo.addons.portal.controllers.portal import pager as portal_pager
@@ -236,3 +242,122 @@ class PortalSubscription(CustomerPortal):
         except (UserError, ValueError) as e:
             logger.warning("portal_upgrade_plan_confirm: %s", e)
         return request.redirect(f"/my/subscriptions/{subscription_id}?upgraded=1")
+
+    # ── Self-service: Backup download ─────────────────────────────────────
+    @http.route(
+        ["/my/subscriptions/<int:subscription_id>/backup"],
+        type="http",
+        auth="user",
+        website=True,
+        methods=["GET"],
+    )
+    def portal_backup_subscription(self, subscription_id, access_token=None, **kw):
+        """Stream a full backup (DB + filestore) through the portal API.
+
+        The Portal FastAPI reads the tenant's admin_passwd from its K8s Secret
+        and calls /web/database/backup on the tenant Odoo internally.
+        The customer never sees the master password.
+        Rate limit: 1 backup per 24 hours per instance.
+        """
+        try:
+            sub_sudo = self._document_check_access(
+                "sale.subscription", subscription_id, access_token
+            )
+        except (AccessError, MissingError):
+            return request.redirect("/my")
+
+        # Find active linked saas.instance
+        instance = request.env["saas.instance"].sudo().search([
+            ("subscription_id", "=", sub_sudo.id),
+            ("state", "not in", ["deleted", "pending_delete"]),
+        ], limit=1)
+
+        if not instance:
+            return request.make_response(
+                "No active SaaS instance found for this subscription.",
+                headers=[("Content-Type", "text/plain; charset=utf-8")],
+            )
+
+        if instance.state != "ready":
+            state_label = dict(instance._fields["state"].selection).get(
+                instance.state, instance.state
+            )
+            return request.make_response(
+                f"Tu instancia está {state_label}. "
+                "El backup solo está disponible cuando la instancia está activa (Ready). "
+                "Contacta soporte si necesitas recuperar tus datos.",
+                headers=[("Content-Type", "text/plain; charset=utf-8")],
+            )
+
+        # Rate limit: 1 backup per 24h
+        if instance.last_backup_at:
+            elapsed = OdooDatetime.now() - instance.last_backup_at
+            if elapsed < timedelta(hours=24):
+                remaining = timedelta(hours=24) - elapsed
+                remaining_h = int(remaining.total_seconds() // 3600)
+                remaining_m = int((remaining.total_seconds() % 3600) // 60)
+                return request.make_response(
+                    f"Límite de backups alcanzado. Próximo backup disponible en "
+                    f"{remaining_h}h {remaining_m}m.",
+                    headers=[("Content-Type", "text/plain; charset=utf-8")],
+                )
+
+        # Call Portal FastAPI backup endpoint
+        portal_url = os.getenv("SAAS_PORTAL_URL", "http://portal.aeisoftware.svc.cluster.local:8000")
+        portal_key = os.getenv("SAAS_PORTAL_KEY", "")
+
+        try:
+            resp = _requests.get(
+                f"{portal_url}/api/v1/instances/{instance.tenant_id}/backup",
+                headers={"X-API-Key": portal_key},
+                stream=True,
+                timeout=(15, 600),  # connect 15s, read 10min
+            )
+            resp.raise_for_status()
+        except _requests.exceptions.ConnectionError:
+            logger.error("backup: portal unreachable for %s", instance.tenant_id)
+            return request.make_response(
+                "El servicio de backup no está disponible. Intenta más tarde.",
+                headers=[("Content-Type", "text/plain; charset=utf-8")],
+            )
+        except _requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else 0
+            if status == 503:
+                return request.make_response(
+                    "La instancia no está accesible en este momento. "
+                    "Asegúrate de que está en estado Ready antes de descargar el backup.",
+                    headers=[("Content-Type", "text/plain; charset=utf-8")],
+                )
+            logger.error("backup: portal returned %s for %s", status, instance.tenant_id)
+            return request.make_response(
+                f"Error al generar el backup ({status}). Contacta soporte.",
+                headers=[("Content-Type", "text/plain; charset=utf-8")],
+            )
+        except Exception:
+            logger.exception("backup: unexpected error for %s", instance.tenant_id)
+            return request.make_response(
+                "Error inesperado al generar el backup. Contacta soporte.",
+                headers=[("Content-Type", "text/plain; charset=utf-8")],
+            )
+
+        # Record timestamp before streaming (rate-limit anchor)
+        instance.last_backup_at = OdooDatetime.now()
+
+        # Stream ZIP back to the browser
+        from datetime import date
+        filename = f"{instance.tenant_id}-backup-{date.today()}.zip"
+
+        def generate():
+            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    yield chunk
+
+        return Response(
+            response=generate(),
+            content_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "X-Content-Type-Options": "nosniff",
+            },
+            direct_passthrough=True,
+        )
