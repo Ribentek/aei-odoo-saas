@@ -1,0 +1,722 @@
+/*
+ * Portal AEI Software — Brand Identity "Deep Logic"
+ * Paleta: Azul Medianoche #1A2238 | Cian Eléctrico #00D2FF
+ *         Gris Nebulosa #F4F7FA  | Púrpura Inteligente #6C63FF
+ * Fuentes: Plus Jakarta Sans (headings) | Inter (body/UI)
+ * Actualizado: 2026-04-16
+ */
+
+/* ── Variables de diseño ─────────────────────────────────────────────── */
+:root {
+  --aei-midnight:   #1A2238;
+  --aei-cyan:       #00D2FF;
+  --aei-cyan-dark:  #00A8CC;
+  --aei-nebula:     #F4F7FA;
+  --aei-purple:     #6C63FF;
+  --aei-purple-light: #EEF0FF;
+  --aei-success:    #00C896;
+  --aei-warning:    #F5A623;
+  --aei-danger:     #E53E3E;
+  --aei-text:       #1A2238;
+  --aei-text-muted: #6B7A99;
+  --aei-border:     #E2E8F0;
+
+  --aei-radius-card: 12px;
+  --aei-radius-btn:  8px;
+  --aei-radius-badge: 20px;
+  --aei-shadow-soft: 0 2px 12px rgba(26, 34, 56, 0.08);
+  --aei-shadow-card: 0 4px 20px rgba(26, 34, 56, 0.10);
+}
+
+/* ── Tipografía ──────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+.o_portal body,
+body.o_portal_wrap {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--aei-text);
+  background-color: var(--aei-nebula);
+}
+
+h1, h2, h3, h4, h5, h6,
+.aei-heading {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-weight: 600;
+  color: var(--aei-midnight);
+  letter-spacing: -0.01em;
+}
+
+/* ── Portal layout base ──────────────────────────────────────────────── */
+.o_portal_wrap {
+  background-color: var(--aei-nebula);
+}
+
+/* Sidebar / nav del portal */
+.o_portal_sidebar,
+.o_portal_my_home .o_portal_sidebar {
+  background: #fff;
+  border-right: 1px solid var(--aei-border);
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────────────── */
+.o_portal_submenu .breadcrumb-item a {
+  color: var(--aei-midnight);
+  font-weight: 500;
+}
+
+.o_portal_submenu .breadcrumb-item.active {
+  color: var(--aei-text-muted);
+}
+
+/* ── Tabla de suscripciones (lista) ─────────────────────────────────── */
+.aei-subscriptions-table {
+  background: #fff;
+  border-radius: var(--aei-radius-card);
+  box-shadow: var(--aei-shadow-soft);
+  overflow: hidden;
+}
+
+.aei-subscriptions-table thead th {
+  background: var(--aei-midnight);
+  color: #fff;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 14px 16px;
+  border: none;
+}
+
+.aei-subscriptions-table tbody tr {
+  border-bottom: 1px solid var(--aei-border);
+  transition: background 0.15s ease;
+}
+
+.aei-subscriptions-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.aei-subscriptions-table tbody tr:hover {
+  background-color: #F0FBFF;
+}
+
+.aei-subscriptions-table td {
+  padding: 14px 16px;
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.aei-subscriptions-table td a {
+  color: var(--aei-midnight);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.aei-subscriptions-table td a:hover {
+  color: var(--aei-cyan-dark);
+}
+
+/* ── Estado vacío ────────────────────────────────────────────────────── */
+.aei-empty-state {
+  text-align: center;
+  padding: 64px 24px;
+  background: #fff;
+  border-radius: var(--aei-radius-card);
+  box-shadow: var(--aei-shadow-soft);
+}
+
+.aei-empty-state .aei-empty-icon {
+  font-size: 48px;
+  color: var(--aei-border);
+  margin-bottom: 16px;
+}
+
+.aei-empty-state h6 {
+  color: var(--aei-midnight);
+  margin-bottom: 8px;
+}
+
+.aei-empty-state p {
+  color: var(--aei-text-muted);
+  font-size: 14px;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+/* ── Badges de estado ────────────────────────────────────────────────── */
+.aei-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--aei-radius-badge);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.aei-badge-ready {
+  background: #ECFDF5;
+  color: #047857;
+  border: 1px solid #A7F3D0;
+}
+
+.aei-badge-provisioning {
+  background: #FFFBEB;
+  color: #92400E;
+  border: 1px solid #FDE68A;
+}
+
+.aei-badge-suspended {
+  background: #F1F5F9;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+
+.aei-badge-error {
+  background: #FEF2F2;
+  color: #991B1B;
+  border: 1px solid #FECACA;
+}
+
+.aei-badge-stage {
+  background: rgba(0, 210, 255, 0.12);
+  color: var(--aei-midnight);
+  border: 1px solid rgba(0, 210, 255, 0.3);
+}
+
+/* ── Tarjeta de instancia SaaS ───────────────────────────────────────── */
+.aei-instance-card {
+  background: #fff;
+  border-radius: var(--aei-radius-card);
+  border: 1.5px solid var(--aei-border);
+  box-shadow: var(--aei-shadow-card);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.aei-instance-card:hover {
+  box-shadow: 0 6px 24px rgba(26, 34, 56, 0.14);
+  border-color: rgba(0, 210, 255, 0.4);
+}
+
+.aei-instance-card .aei-instance-header {
+  background: linear-gradient(135deg, var(--aei-midnight) 0%, #2D3A5E 100%);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.aei-instance-card .aei-instance-header .aei-instance-title {
+  color: #fff;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.aei-instance-card .aei-instance-body {
+  padding: 20px;
+}
+
+.aei-instance-url {
+  font-family: 'Inter', monospace;
+  font-size: 13px;
+  color: var(--aei-midnight);
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.aei-instance-url a {
+  color: var(--aei-cyan-dark);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.aei-instance-url a:hover {
+  text-decoration: underline;
+}
+
+.aei-plan-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  background: var(--aei-midnight);
+  color: var(--aei-cyan);
+  border: 1px solid rgba(0, 210, 255, 0.3);
+}
+
+/* ── Botón primario AEI (Acceder al Sistema) ─────────────────────────── */
+.btn-aei-primary {
+  background: linear-gradient(135deg, var(--aei-cyan) 0%, #00A8CC 100%);
+  color: var(--aei-midnight) !important;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  border: none;
+  border-radius: var(--aei-radius-btn);
+  padding: 10px 20px;
+  box-shadow: 0 3px 10px rgba(0, 210, 255, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn-aei-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 16px rgba(0, 210, 255, 0.45);
+  color: var(--aei-midnight) !important;
+  text-decoration: none;
+}
+
+.btn-aei-primary:active {
+  transform: translateY(0);
+}
+
+/* ── Botones secundarios ─────────────────────────────────────────────── */
+.btn-aei-outline {
+  background: transparent;
+  color: var(--aei-midnight) !important;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  border: 1.5px solid var(--aei-border);
+  border-radius: var(--aei-radius-btn);
+  padding: 9px 18px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn-aei-outline:hover {
+  border-color: var(--aei-midnight);
+  background: rgba(26, 34, 56, 0.04);
+  color: var(--aei-midnight) !important;
+  text-decoration: none;
+}
+
+.btn-aei-danger {
+  background: transparent;
+  color: var(--aei-danger) !important;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  border: 1.5px solid rgba(229, 62, 62, 0.35);
+  border-radius: var(--aei-radius-btn);
+  padding: 9px 18px;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.btn-aei-danger:hover {
+  background: rgba(229, 62, 62, 0.06);
+  border-color: var(--aei-danger);
+  color: var(--aei-danger) !important;
+  text-decoration: none;
+}
+
+/* ── Sección de detalles de suscripción ──────────────────────────────── */
+.aei-detail-card {
+  background: #fff;
+  border-radius: var(--aei-radius-card);
+  border: 1px solid var(--aei-border);
+  box-shadow: var(--aei-shadow-soft);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.aei-detail-card .aei-section-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--aei-text-muted);
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--aei-border);
+}
+
+.aei-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--aei-border);
+  font-size: 14px;
+}
+
+.aei-detail-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.aei-detail-row .aei-label {
+  color: var(--aei-text-muted);
+  font-weight: 500;
+  min-width: 140px;
+}
+
+.aei-detail-row .aei-value {
+  color: var(--aei-text);
+  font-weight: 600;
+  text-align: right;
+}
+
+/* ── Tarjeta de usuarios (analytics — Púrpura Inteligente) ───────────── */
+.aei-users-card {
+  background: #fff;
+  border-radius: var(--aei-radius-card);
+  border: 1px solid rgba(108, 99, 255, 0.2);
+  box-shadow: var(--aei-shadow-soft);
+  overflow: hidden;
+}
+
+.aei-users-card .aei-users-header {
+  background: linear-gradient(135deg, var(--aei-purple) 0%, #5A52E0 100%);
+  padding: 14px 20px;
+  color: #fff;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aei-users-card .aei-users-body {
+  padding: 20px;
+}
+
+.aei-metric {
+  text-align: center;
+}
+
+.aei-metric .aei-metric-value {
+  display: block;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--aei-midnight);
+  line-height: 1.2;
+}
+
+.aei-metric .aei-metric-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--aei-text-muted);
+  margin-top: 4px;
+}
+
+.aei-metric .aei-metric-extra {
+  color: var(--aei-purple);
+}
+
+/* ── Alerta de factura estimada ──────────────────────────────────────── */
+.aei-invoice-alert {
+  background: linear-gradient(135deg, rgba(108, 99, 255, 0.08) 0%, rgba(0, 210, 255, 0.06) 100%);
+  border: 1px solid rgba(108, 99, 255, 0.2);
+  border-radius: var(--aei-radius-card);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.aei-invoice-alert .aei-invoice-text {
+  font-size: 14px;
+  color: var(--aei-midnight);
+}
+
+.aei-invoice-alert .aei-invoice-amount {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--aei-purple);
+  white-space: nowrap;
+}
+
+/* ── Tabla de líneas de servicio ─────────────────────────────────────── */
+.aei-lines-table {
+  width: 100%;
+  border-radius: var(--aei-radius-card);
+  overflow: hidden;
+  box-shadow: var(--aei-shadow-soft);
+}
+
+.aei-lines-table thead th {
+  background: var(--aei-nebula);
+  color: var(--aei-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 12px 16px;
+  border-bottom: 2px solid var(--aei-border);
+}
+
+.aei-lines-table tbody td {
+  padding: 12px 16px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--aei-border);
+  background: #fff;
+}
+
+.aei-lines-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Tabla de totales ────────────────────────────────────────────────── */
+.aei-totals-table td {
+  padding: 8px 0;
+  font-size: 14px;
+}
+
+.aei-totals-table .aei-total-final td {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--aei-midnight);
+  border-top: 2px solid var(--aei-midnight);
+  padding-top: 12px;
+}
+
+/* ── Tarjetas de plan (upgrade) ──────────────────────────────────────── */
+.aei-plan-card {
+  background: #fff;
+  border-radius: var(--aei-radius-card);
+  border: 1.5px solid var(--aei-border);
+  box-shadow: var(--aei-shadow-soft);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  overflow: hidden;
+}
+
+.aei-plan-card:hover {
+  border-color: var(--aei-cyan);
+  box-shadow: 0 6px 24px rgba(0, 210, 255, 0.18);
+}
+
+.aei-plan-card .aei-plan-header {
+  background: var(--aei-nebula);
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--aei-border);
+  text-align: center;
+}
+
+.aei-plan-card .aei-plan-name {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--aei-midnight);
+}
+
+.aei-plan-card .aei-plan-body {
+  padding: 20px;
+  flex: 1;
+}
+
+.aei-plan-card .aei-plan-feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 14px;
+  color: var(--aei-midnight);
+  border-bottom: 1px solid var(--aei-border);
+}
+
+.aei-plan-card .aei-plan-feature:last-child {
+  border-bottom: none;
+}
+
+.aei-plan-card .aei-plan-feature i {
+  color: var(--aei-cyan-dark);
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.aei-plan-card .aei-plan-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--aei-border);
+  background: var(--aei-nebula);
+}
+
+/* Plan actual (destacado) */
+.aei-current-plan-card {
+  background: #fff;
+  border-radius: var(--aei-radius-card);
+  border: 2px solid var(--aei-cyan);
+  box-shadow: 0 4px 20px rgba(0, 210, 255, 0.18);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.aei-current-plan-card .aei-current-plan-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--aei-cyan-dark);
+  margin-bottom: 8px;
+}
+
+.aei-current-plan-card .aei-current-plan-name {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--aei-midnight);
+  margin-bottom: 16px;
+}
+
+/* ── Modal de cancelación ────────────────────────────────────────────── */
+.aei-modal .modal-content {
+  border-radius: var(--aei-radius-card);
+  border: none;
+  box-shadow: 0 20px 60px rgba(26, 34, 56, 0.25);
+  overflow: hidden;
+}
+
+.aei-modal .modal-header {
+  background: var(--aei-danger);
+  padding: 18px 24px;
+  border-bottom: none;
+}
+
+.aei-modal .modal-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.aei-modal .modal-body {
+  padding: 24px;
+}
+
+.aei-modal .modal-body ul {
+  color: var(--aei-text-muted);
+  font-size: 14px;
+  line-height: 1.8;
+  padding-left: 20px;
+}
+
+.aei-modal .modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--aei-border);
+  background: var(--aei-nebula);
+}
+
+/* ── Alertas de éxito ────────────────────────────────────────────────── */
+.aei-alert-success {
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  border-radius: var(--aei-radius-btn);
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #065F46;
+  font-weight: 500;
+}
+
+.aei-alert-warning {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: var(--aei-radius-btn);
+  padding: 14px 18px;
+  font-size: 14px;
+  color: #78350F;
+}
+
+/* ── Spinner de provisioning ─────────────────────────────────────────── */
+@keyframes aei-spin {
+  to { transform: rotate(360deg); }
+}
+
+.aei-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(146, 64, 14, 0.3);
+  border-top-color: #92400E;
+  border-radius: 50%;
+  animation: aei-spin 0.8s linear infinite;
+}
+
+/* ── Contactos (avatar area) ─────────────────────────────────────────── */
+.aei-contact-block .aei-contact-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--aei-text-muted);
+  margin-bottom: 12px;
+}
+
+.aei-contact-block .o_portal_contact_img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .aei-instance-card .aei-instance-body {
+    padding: 16px;
+  }
+
+  .aei-detail-card {
+    padding: 18px 16px;
+  }
+
+  .btn-aei-primary,
+  .btn-aei-outline,
+  .btn-aei-danger {
+    width: 100%;
+    justify-content: center;
+  }
+
+  #subscription_actions .d-flex {
+    flex-direction: column;
+  }
+
+  .aei-invoice-alert {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .aei-metric .aei-metric-value {
+    font-size: 22px;
+  }
+}
