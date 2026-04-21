@@ -22,6 +22,7 @@ import os
 
 from odoo import http
 from odoo.http import request
+from werkzeug.exceptions import Unauthorized
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class SaaSWebhookController(http.Controller):
                 "instance_status_webhook: invalid key from %s",
                 request.httprequest.remote_addr,
             )
-            return {"error": "Forbidden", "status": 403}
+            raise Unauthorized()
 
         # ── Parse payload ──────────────────────────────────────────────────────
         data = request.get_json_data() or {}
