@@ -87,7 +87,7 @@ bootstrap:
       parameters:
 
         # ─── Conexiones ───────────────────────────────────────────────────
-        max_connections: 300
+        max_connections: 800
         superuser_reserved_connections: 5
 
         # ─── Memoria (8GB RAM) ────────────────────────────────────────────

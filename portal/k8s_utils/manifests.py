@@ -129,6 +129,9 @@ def configmap_manifest(tenant_id: str, db_password: str, admin_password: str, ad
 
     res = PLAN_RESOURCES.get(plan, PLAN_RESOURCES["starter"])
 
+    # Only include /mnt/extra-addons when repos are configured — an empty
+    # emptyDir makes Odoo reject it as "not a valid addons directory".
+    extra_path = ",/mnt/extra-addons" if addons_repos else ""
     conf = f"""[options]
 db_host = {POSTGRES_HOST}
 db_port = {POSTGRES_PORT}
@@ -138,7 +141,7 @@ admin_passwd = {admin_password}
 db_name = {db_name}
 dbfilter = ^{db_name}$
 list_db = False
-addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons
+addons_path = /usr/lib/python3/dist-packages/odoo/addons{extra_path}
 data_dir = /var/lib/odoo
 workers = {res["workers"]}
 max_cron_threads = {res["cron_threads"]}
@@ -241,7 +244,18 @@ def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image
                                 "    print(f\"Cloning repo branch {branch} into {dest}...\")\n"
                                 "    if not os.path.exists(dest):\n"
                                 "        subprocess.run(cmd, check=True)\n"
-                                "' && chown -R 101:101 /mnt/extra-addons"
+                                # Ensure /mnt/extra-addons is always a valid addons dir.
+                                # The custom image entrypoint unconditionally adds it to
+                                # --addons-path; an empty emptyDir causes Odoo to abort
+                                # with 'not a valid addons directory'.
+                                "' && "
+                                "if [ -z \"$(ls -A /mnt/extra-addons 2>/dev/null)\" ]; then "
+                                "  mkdir -p /mnt/extra-addons/_placeholder && "
+                                "  touch /mnt/extra-addons/_placeholder/__init__.py && "
+                                "  printf \"{'name': 'Extra Addons Placeholder', 'version': '1.0', 'installable': False}\\n\" "
+                                "    > /mnt/extra-addons/_placeholder/__manifest__.py; "
+                                "fi && "
+                                "chown -R 101:101 /mnt/extra-addons"
                             ],
                             "env": [
                                 {
@@ -284,15 +298,19 @@ def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image
                             "imagePullPolicy": "Always",
                             "command": ["/bin/sh", "-c"],
                             "args": [
-                                f"DB_EXISTS=$(PGPASSWORD=$DB_PASSWORD psql "
+                                # Check if Odoo schema exists (not just the DB) by looking for
+                                # ir_module_module. A freshly created empty DB would pass the
+                                # old "SELECT FROM pg_database" check but still need --init=base.
+                                f"DB_INIT=$(PGPASSWORD=$DB_PASSWORD psql "
                                 f"-h {POSTGRES_HOST} -p {POSTGRES_PORT} "
-                                f"-U {pg_user} -tAc "
-                                f"\"SELECT 1 FROM pg_database WHERE datname='{db_name}'\" "
+                                f"-U {pg_user} -d {db_name} -tAc "
+                                "\"SELECT 1 FROM information_schema.tables "
+                                "WHERE table_schema='public' AND table_name='ir_module_module'\" "
                                 f"2>/dev/null || true); "
-                                "if [ \"$DB_EXISTS\" = \"1\" ]; then "
-                                f"  echo 'DB {db_name} already initialized, skipping --init=base'; "
+                                "if [ \"$DB_INIT\" = \"1\" ]; then "
+                                f"  echo 'DB {db_name} already has Odoo schema, skipping --init=base'; "
                                 "else "
-                                "  echo 'Initializing DB for the first time...'; "
+                                "  echo 'Initializing Odoo schema for the first time...'; "
                                 "  odoo --config=/etc/odoo/odoo.conf --init=base --stop-after-init && "
                                 "  echo \"env.ref('base.user_admin').write({'password': '${APP_ADMIN_PASSWORD}'}); env.cr.commit()\" "
                                 "    | odoo shell --config=/etc/odoo/odoo.conf; "

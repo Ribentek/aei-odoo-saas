@@ -1,5 +1,7 @@
 # PostgreSQL HA Cluster — Guía Operativa
 
+> **AVISO (2026-04-11):** Las secciones de **PgBouncer** (puerto `:5002`, `:6432`, `SHOW POOLS`, `pgbouncer.ini`) en este documento son **HISTÓRICAS**. PgBouncer fue eliminado del path de tráfico en commit `100d435`. Sigue instalado en las VMs pero deshabilitado (`systemctl disable pgbouncer`). Todo el tráfico va por HAProxy `:5000` (RW) y `:5001` (RO). Para la referencia operativa vigente, ver [`odoo-saas-mvp.wiki/PostgreSQL-Cluster-Operations.md`](https://github.com/jpvargassoruco/odoo-saas-mvp/wiki/PostgreSQL-Cluster-Operations).
+
 Clúster PostgreSQL 16 con alta disponibilidad para Odoo SaaS, corriendo en 3 VMs dedicadas.
 
 ## Arquitectura

@@ -1,0 +1,140 @@
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: 2Gi
+          storageClassName: ceph-rbd
+  config:
+    global:
+      resolve_timeout: 5m
+      smtp_auth_password: "${SMTP_PASSWORD}"
+      smtp_auth_username: info@aeisoftware.com
+      smtp_from: info@aeisoftware.com
+      smtp_require_tls: false
+      smtp_smarthost: mail.redesk.we.bs:465
+    inhibit_rules:
+    - equal:
+      - namespace
+      - alertname
+      source_matchers:
+      - severity = critical
+      target_matchers:
+      - severity =~ warning|info
+    - equal:
+      - namespace
+      - alertname
+      source_matchers:
+      - severity = warning
+      target_matchers:
+      - severity = info
+    - equal:
+      - namespace
+      source_matchers:
+      - alertname = InfoInhibitor
+      target_matchers:
+      - severity = info
+    receivers:
+    - name: "null"
+    - name: email-critical
+      email_configs:
+      - to: jpvargas@aeisoftware.com
+        send_resolved: true
+        headers:
+          Subject: '[CRÍTICO] {{ .GroupLabels.alertname }} — {{ .CommonLabels.namespace }}'
+    - name: email-warning
+      email_configs:
+      - to: jpvargas@aeisoftware.com
+        send_resolved: true
+        headers:
+          Subject: '[WARNING] {{ .GroupLabels.alertname }} — {{ .CommonLabels.namespace }}'
+    - name: email-info
+      email_configs:
+      - to: jpvargas@aeisoftware.com
+        send_resolved: false
+        headers:
+          Subject: '[INFO] {{ .GroupLabels.alertname }}'
+    route:
+      group_by:
+      - namespace
+      - alertname
+      group_interval: 5m
+      group_wait: 30s
+      receiver: email-warning
+      repeat_interval: 4h
+      routes:
+      - matchers:
+        - alertname = "Watchdog"
+        receiver: "null"
+      - matchers:
+        - alertname = "InfoInhibitor"
+        receiver: "null"
+      - group_wait: 10s
+        matchers:
+        - severity = "critical"
+        receiver: email-critical
+        repeat_interval: 1h
+      - matchers:
+        - severity = "warning"
+        receiver: email-warning
+      - matchers:
+        - severity = "info"
+        receiver: email-info
+        repeat_interval: 24h
+    templates:
+    - /etc/alertmanager/config/*.tmpl
+  enabled: true
+
+grafana:
+  adminPassword: "${GRAFANA_ADMIN_PASSWORD}"
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClassName: ceph-rbd
+
+kubeControllerManager:
+  enabled: false
+
+kubeEtcd:
+  enabled: true
+  endpoints:
+  - 192.168.0.185
+  - 192.168.0.211
+  - 192.168.0.243
+  service:
+    port: 2381
+    targetPort: 2381
+
+kubeProxy:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    additionalScrapeConfigs: []
+    replicas: 2
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: 20Gi
+          storageClassName: ceph-rbd
+
+prometheus-node-exporter:
+  prometheus:
+    monitor:
+      relabelings:
+      - action: replace
+        sourceLabels:
+        - __meta_kubernetes_pod_node_name
+        targetLabel: node

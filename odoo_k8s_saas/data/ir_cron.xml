@@ -23,4 +23,15 @@ model.search([('state', '=', 'provisioning')]).action_check_status()
     <field name="interval_type">minutes</field>
     <field name="active">True</field>
   </record>
+
+  <!-- Daily GC: drop Postgres DBs whose K8s namespace is gone -->
+  <record id="ir_cron_gc_orphaned_dbs" model="ir.cron">
+    <field name="name">SaaS: GC — Drop Orphaned Postgres Databases</field>
+    <field name="model_id" ref="odoo_k8s_saas.model_saas_instance"/>
+    <field name="state">code</field>
+    <field name="code">model._cron_gc_orphaned_dbs()</field>
+    <field name="interval_number">1</field>
+    <field name="interval_type">days</field>
+    <field name="active">True</field>
+  </record>
 </odoo>

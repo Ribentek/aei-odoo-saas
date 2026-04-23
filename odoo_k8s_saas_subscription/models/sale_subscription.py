@@ -497,22 +497,23 @@ class SaleSubscription(models.Model):
 
             # → Closed: suspend instances and record closed_date for grace-period tracking
             elif stage_closed and new_stage_id == stage_closed.id:
-                to_suspend = instances.filtered(
+                closeable = instances.filtered(
                     lambda i: i.state in ("draft", "provisioning", "ready", "suspended")
                 )
-                if to_suspend:
+                needs_stop = closeable.filtered(lambda i: i.state == "ready")
+                if needs_stop:
                     logger.info(
                         "Subscription %s → Closed: suspending %d instance(s) "
                         "(data retained for grace period before deletion)",
-                        rec.display_name, len(to_suspend),
+                        rec.display_name, len(needs_stop),
                     )
-                    to_suspend.action_stop()
-                    # Record when the subscription closed so the grace-period cron
-                    # can calculate when to proceed to deletion.
-                    now = fields.Datetime.now()
-                    for inst in to_suspend:
-                        if not inst.closed_date:
-                            inst.closed_date = now
+                    needs_stop.action_stop()
+                # Record when the subscription closed so the grace-period cron
+                # can calculate when to proceed to deletion.
+                now = fields.Datetime.now()
+                for inst in closeable:
+                    if not inst.closed_date:
+                        inst.closed_date = now
 
         return res
 

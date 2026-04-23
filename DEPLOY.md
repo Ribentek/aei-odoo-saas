@@ -188,16 +188,16 @@ aws --endpoint-url http://10.40.1.240:7480 --no-verify-ssl \
     s3 cp "s3://pg-backups/${S3_KEY}" /tmp/restore.dump
 
 # 3. Restaurar en una BD nueva (nunca sobre la BD en uso sin detener Odoo primero)
-createdb -h postgres.aeisoftware.svc.cluster.local -p 5001 \
+createdb -h postgres.aeisoftware.svc.cluster.local -p 5000 \
          -U postgres "${DB}_restore"
-pg_restore -h postgres.aeisoftware.svc.cluster.local -p 5001 \
+pg_restore -h postgres.aeisoftware.svc.cluster.local -p 5000 \
            -U postgres -d "${DB}_restore" \
            --no-owner --role=odoo \
            /tmp/restore.dump
 
 # 4. Verificar la BD restaurada, luego renombrar si todo está OK:
 #    Detener el pod Odoo del tenant antes de renombrar.
-psql -h postgres.aeisoftware.svc.cluster.local -p 5001 -U postgres \
+psql -h postgres.aeisoftware.svc.cluster.local -p 5000 -U postgres \
   -c "ALTER DATABASE ${DB} RENAME TO ${DB}_bak; \
       ALTER DATABASE ${DB}_restore RENAME TO ${DB};"
 

@@ -22,8 +22,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 import re
 
-from k8s_utils.manifests import all_manifests, PLAN_RESOURCES, BASE_DOMAIN, URL_SCHEME, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_PORT_PRIMARY, GIT_TOKEN
-from k8s_utils.client import apply_manifest, delete_namespace, get_deployment_status
+from k8s_utils.manifests import all_manifests, pdb_manifest, PLAN_RESOURCES, BASE_DOMAIN, URL_SCHEME, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_PORT_PRIMARY, GIT_TOKEN
+from k8s_utils.client import apply_manifest, delete_namespace, get_deployment_status, delete_pdb
 from metrics import record_operation, record_error
 
 # ── Odoo webhook push config ──────────────────────────────────────────────────
@@ -93,7 +93,7 @@ def _poll_until_ready_then_notify(tenant_id: str) -> None:
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Postgres superuser used only by the portal to create/drop tenant users
+# Portal DB role — non-superuser (CREATEROLE + CREATEDB only, NOT superuser)
 _PG_ADMIN_USER = os.getenv("POSTGRES_ADMIN_USER", "postgres")
 _PG_ADMIN_PASSWORD = os.getenv("POSTGRES_ADMIN_PASSWORD", "")
 
@@ -322,11 +322,12 @@ def delete_instance(tenant_id: str):
 
 @router.post("/{tenant_id}/stop")
 def stop_instance(tenant_id: str):
-    """Suspend a tenant instance (scale to 0)."""
+    """Suspend a tenant instance (scale to 0 and remove PDB to silence false alerts)."""
     namespace = f"odoo-{tenant_id}"
     from k8s_utils.client import scale_deployment
     try:
         scale_deployment(namespace, "odoo", 0)
+        delete_pdb(namespace, "odoo-pdb")
     except Exception as exc:
         record_error("stop", "k8s_error")
         raise HTTPException(status_code=500, detail=str(exc))
@@ -336,11 +337,12 @@ def stop_instance(tenant_id: str):
 
 @router.post("/{tenant_id}/start")
 def start_instance(tenant_id: str):
-    """Resume a tenant instance (scale to 1)."""
+    """Resume a tenant instance (scale to 1 and restore PDB protection)."""
     namespace = f"odoo-{tenant_id}"
     from k8s_utils.client import scale_deployment
     try:
         scale_deployment(namespace, "odoo", 1)
+        apply_manifest(pdb_manifest(tenant_id))
     except Exception as exc:
         record_error("start", "k8s_error")
         raise HTTPException(status_code=500, detail=str(exc))
@@ -599,10 +601,13 @@ def _drop_pg_user(pg_user: str, db_name: str) -> None:
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            # Kick everyone off the database first
+            # Kick non-superuser connections off the database first.
+            # pg_terminate_backend requires SUPERUSER to terminate other superuser
+            # processes (e.g. pg_exporter), so we skip those to avoid permission errors.
             cur.execute(
-                "SELECT pg_terminate_backend(pid) "
-                "FROM pg_stat_activity WHERE datname = %s AND pid <> pg_backend_pid()",
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = %s AND pid <> pg_backend_pid() "
+                "AND NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = usename AND rolsuper)",
                 (db_name,),
             )
             cur.execute(sql.SQL('DROP DATABASE IF EXISTS {}').format(sql.Identifier(db_name)))

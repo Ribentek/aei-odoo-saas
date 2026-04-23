@@ -243,6 +243,14 @@ def scale_deployment(namespace: str, name: str, replicas: int) -> None:
     _apps().patch_namespaced_deployment_scale(name=name, namespace=namespace, body=body)
 
 
+def delete_pdb(namespace: str, name: str) -> None:
+    try:
+        _policy().delete_namespaced_pod_disruption_budget(name=name, namespace=namespace)
+    except client.exceptions.ApiException as e:
+        if e.status != 404:
+            raise
+
+
 _EXCLUDED_NAMESPACES = {"odoo-admin", "odoo-stg"}
 
 

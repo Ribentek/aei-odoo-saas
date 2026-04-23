@@ -159,11 +159,13 @@ def delete_orphaned_dbs(dry_run: bool = Query(False, description="Preview withou
                     dropped.append({"db": db_name, "role": role_name, "size": o["size"]})
                     continue
                 try:
-                    # Terminate active connections before drop
+                    # Kick non-superuser connections off the database first.
+                    # pg_terminate_backend requires SUPERUSER to terminate other superuser
+                    # processes (e.g. pg_exporter), so we skip those to avoid permission errors.
                     cur.execute(
-                        "SELECT pg_terminate_backend(pid) "
-                        "FROM pg_stat_activity "
-                        "WHERE datname = %s AND pid <> pg_backend_pid()",
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                        "WHERE datname = %s AND pid <> pg_backend_pid() "
+                        "AND NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = usename AND rolsuper)",
                         (db_name,),
                     )
                     cur.execute(

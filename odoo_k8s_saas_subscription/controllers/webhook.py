@@ -17,11 +17,12 @@ The 2-minute _cron_reconcile_all() cron remains as a safety net.
 This webhook is an optimization that reduces notification latency from
 0-2 minutes to a few seconds.
 """
+import json
 import logging
 import os
 
 from odoo import http
-from odoo.http import request
+from odoo.http import Response, request
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class SaaSWebhookController(http.Controller):
 
     @http.route(
         "/saas/webhook/instance-status",
-        type="json",
+        type="http",
         auth="none",
         csrf=False,
         methods=["POST"],
@@ -40,28 +41,34 @@ class SaaSWebhookController(http.Controller):
     )
     def instance_status_webhook(self, **kwargs):
         """Receive a push notification from the portal about an instance status change."""
+        def _json(data, status=200):
+            return Response(json.dumps(data), status=status, mimetype="application/json")
+
         # ── Authentication ─────────────────────────────────────────────────────
         incoming_key = request.httprequest.headers.get("X-Webhook-Key", "")
         if not WEBHOOK_KEY:
             logger.warning(
                 "instance_status_webhook: SAAS_WEBHOOK_KEY not set — rejecting all requests"
             )
-            return {"error": "Webhook not configured", "status": 503}
+            return _json({"error": "Webhook not configured"}, 503)
 
         if incoming_key != WEBHOOK_KEY:
             logger.warning(
                 "instance_status_webhook: invalid key from %s",
                 request.httprequest.remote_addr,
             )
-            return {"error": "Forbidden", "status": 403}
+            return _json({"error": "Unauthorized"}, 401)
 
         # ── Parse payload ──────────────────────────────────────────────────────
-        data = request.get_json_data() or {}
+        try:
+            data = json.loads(request.httprequest.data or b"{}") or {}
+        except ValueError:
+            return _json({"error": "Invalid JSON"}, 400)
         tenant_id = data.get("tenant_id", "").strip()
         new_status = data.get("status", "").strip()
 
         if not tenant_id or not new_status:
-            return {"error": "Missing tenant_id or status", "status": 400}
+            return _json({"error": "Missing tenant_id or status"}, 400)
 
         logger.info(
             "instance_status_webhook: received status=%s for tenant_id=%s",
@@ -77,7 +84,7 @@ class SaaSWebhookController(http.Controller):
             logger.warning(
                 "instance_status_webhook: tenant_id '%s' not found in Odoo", tenant_id
             )
-            return {"error": "Instance not found", "status": 404}
+            return _json({"error": "Instance not found"}, 404)
 
         old_state = instance.state
 
@@ -95,11 +102,11 @@ class SaaSWebhookController(http.Controller):
                 "instance_status_webhook: unknown status '%s' for %s",
                 new_status, tenant_id,
             )
-            return {"error": f"Unknown status: {new_status}", "status": 400}
+            return _json({"error": f"Unknown status: {new_status}"}, 400)
 
         # Only transition if the state actually changes and is valid
         if old_state == odoo_state:
-            return {"ok": True, "state": odoo_state, "changed": False}
+            return _json({"ok": True, "state": odoo_state, "changed": False})
 
         try:
             instance.write({"state": odoo_state})
@@ -107,7 +114,7 @@ class SaaSWebhookController(http.Controller):
             logger.exception(
                 "instance_status_webhook: failed to write state for %s", tenant_id
             )
-            return {"error": str(e), "status": 500}
+            return _json({"error": str(e)}, 500)
 
         logger.info(
             "instance_status_webhook: %s state %s → %s",
@@ -128,4 +135,4 @@ class SaaSWebhookController(http.Controller):
                     tenant_id,
                 )
 
-        return {"ok": True, "state": odoo_state, "changed": True}
+        return _json({"ok": True, "state": odoo_state, "changed": True})

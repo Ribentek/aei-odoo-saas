@@ -543,6 +543,41 @@ class SaasInstance(models.Model):
                     rec.tenant_id,
                 )
 
+    @api.model
+    def _cron_gc_orphaned_dbs(self):
+        """Cron: drop Postgres DBs whose K8s namespace no longer exists.
+
+        Calls DELETE /api/v1/gc/dbs on the portal. The portal compares every
+        odoo_* DB against live K8s namespaces and drops orphans (protected DBs
+        like admin/staging/templates are always excluded on the portal side).
+
+        Runs daily. Results are logged; failures do not raise so the cron stays
+        active even if the portal is temporarily unreachable.
+        """
+        try:
+            resp = requests.delete(
+                f"{PORTAL_URL}/api/v1/gc/dbs",
+                headers={"X-API-Key": PORTAL_KEY},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            dropped = data.get("dropped", [])
+            errors = data.get("errors", [])
+            if dropped:
+                logger.info(
+                    "_cron_gc_orphaned_dbs: dropped %d orphaned DB(s): %s",
+                    len(dropped), [d["db"] for d in dropped],
+                )
+            if errors:
+                logger.warning(
+                    "_cron_gc_orphaned_dbs: %d error(s): %s", len(errors), errors
+                )
+            if not dropped and not errors:
+                logger.info("_cron_gc_orphaned_dbs: no orphaned DBs found.")
+        except Exception as exc:
+            logger.warning("_cron_gc_orphaned_dbs: portal unreachable: %s", exc)
+
     def action_patch_addons(self):
         """PATCH /api/v1/instances/{tenant_id}/config with addons_repos."""
         self.ensure_one()

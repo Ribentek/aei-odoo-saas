@@ -429,7 +429,7 @@ kubectl get deploy -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.n
 
 ```bash
 # Borra las bases de datos en Postgres
-kubectl exec -it -n aeisoftware postgres-0 -- psql -U odoo -d postgres -c "DROP DATABASE \"odoo-demo-company\"; DROP ROLE \"odoo-demo-company\";"
+## Nota: el cluster PG corre en 3 VMs externas (no en K8s). Para eliminar DBs/roles de tenants manualmente, ver [[PostgreSQL Cluster Operations]] en la wiki.
 
 # Borra la instancia en K8s (deployments, servicios, PVCs y secretos)
 python3 infra/delete-instance.py demo-company
