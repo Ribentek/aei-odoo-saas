@@ -178,6 +178,11 @@ spec:
                   name: portal-secret
                   key: SAAS_WEBHOOK_KEY
                   optional: true
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odoo-admin-secret
+                  key: DB_PASSWORD
           volumeMounts:
             - name: odoo-conf-rendered
               mountPath: /etc/odoo
