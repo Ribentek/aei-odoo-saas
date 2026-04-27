@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <odoo>
+    <!-- Google Fonts for AEI portal brand identity -->
+    <template id="portal_aei_fonts" inherit_id="web.layout" name="AEI Portal Fonts">
+        <xpath expr="//head" position="inside">
+            <link rel="preconnect" href="https://fonts.googleapis.com"/>
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin=""/>
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap"/>
+        </xpath>
+    </template>
+
     <!-- ═══════════════════════════════════════════════════════════
          Breadcrumbs
          ═══════════════════════════════════════════════════════════ -->

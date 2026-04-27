@@ -29,7 +29,7 @@
 }
 
 /* ── Tipografía ──────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+/* Google Fonts loaded via website layout template, not here */
 
 .o_portal body,
 body.o_portal_wrap {
