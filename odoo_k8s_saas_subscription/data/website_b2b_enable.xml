@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!--
+        Activa los campos b2b (Nombre de empresa + NIT/VAT) en el formulario
+        de dirección del checkout.
+
+        Sin este registro, `<t t-if="website._display_partner_b2b_fields()">` en
+        website_sale/views/templates.xml:2530 oculta company_name_div y div_vat,
+        y los XPath del override hacen silent-miss. El servidor sigue exigiendo
+        esos campos pero el usuario no puede verlos.
+    -->
+    <record id="website_sale.address_b2b" model="ir.ui.view">
+        <field name="active" eval="True"/>
+    </record>
+</odoo>

@@ -46,6 +46,11 @@ class WebsiteSaleSaaSGuard(WebsiteSale):
         """Required address fields: only name/phone/email + country (always Bolivia)."""
         return {"name", "phone", "email", "country_id"}
 
+    def _get_mandatory_billing_address_fields(self, country_sudo):
+        """Odoo 18 entry point for /shop/address billing validation.
+        Override directly so the exact set is enforced regardless of chain changes."""
+        return {"name", "email", "phone", "company_name", "vat", "country_id"}
+
     # ── Internal helpers ─────────────────────────────────────────────────────
 
     def _cart_has_saas(self, order):

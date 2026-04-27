@@ -81,22 +81,24 @@
 })();
 
 // Pre-select Bolivia on the address form if no country is chosen yet.
+// Uses MutationObserver so it works when Odoo 18 renders the form via interactions/XHR
+// (DOMContentLoaded alone fires before the <select id="o_country_id"> exists).
 (function () {
     "use strict";
-    function _setBoliviaDefault() {
-        var sel = document.getElementById("o_country_id");
-        if (!sel) return;
-        if (sel.value) return; // already has a value
+    function _setBolivia(sel) {
+        if (!sel || sel.value) return;
         var opt = sel.querySelector('option[code="BO"]');
-        if (opt) {
-            opt.selected = true;
-            // Trigger change so Odoo updates state/zip visibility
-            sel.dispatchEvent(new Event("change", { bubbles: true }));
-        }
+        if (!opt) return;
+        opt.selected = true;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    function _scan() {
+        _setBolivia(document.getElementById("o_country_id"));
     }
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", _setBoliviaDefault);
+        document.addEventListener("DOMContentLoaded", _scan);
     } else {
-        _setBoliviaDefault();
+        _scan();
     }
+    new MutationObserver(_scan).observe(document.body, { childList: true, subtree: true });
 })();

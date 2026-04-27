@@ -28,10 +28,12 @@
             <attribute name="class">col-form-label label-optional</attribute>
         </xpath>
 
-        <!-- required_fields drives client-side JS highlighting -->
-        <xpath expr="//input[@name='required_fields']" position="replace">
-            <input type="hidden" name="required_fields"
-                   t-att-value="'name,email,phone,company_name,vat,country_id'"/>
+        <!-- required_fields drives client-side JS + server-side validation.
+             Use [1] to match only the first occurrence (a second exists in
+             address_on_payment) and attributes instead of replace to avoid
+             removing the node entirely. -->
+        <xpath expr="(//input[@name='required_fields'])[1]" position="attributes">
+            <attribute name="t-att-value">'name,email,phone,company_name,vat,country_id'</attribute>
         </xpath>
 
     </template>
