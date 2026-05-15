@@ -35,9 +35,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sanitize ref name for Docker tag
-        id: meta
         run: echo "tag=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
+
+      - name: Lowercase repo owner
+        id: repo_owner
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push (with layer cache)
         uses: docker/build-push-action@v6
@@ -45,8 +47,8 @@ jobs:
           context: portal
           push: ${{ github.event_name == 'push' }}
           tags: |
-            ghcr.io/${{ github.repository_owner }}/aei-odoo-saas/portal:${{ steps.meta.outputs.tag }}
-            ghcr.io/${{ github.repository_owner }}/aei-odoo-saas/portal:${{ github.sha }}
+            ghcr.io/${{ steps.repo_owner.outputs.owner }}/aei-odoo-saas/portal:${{ steps.meta.outputs.tag }}
+            ghcr.io/${{ steps.repo_owner.outputs.owner }}/aei-odoo-saas/portal:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -58,5 +60,5 @@ jobs:
           context: portal
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/aei-odoo-saas/portal:stable
+            ghcr.io/${{ steps.repo_owner.outputs.owner }}/aei-odoo-saas/portal:stable
           cache-from: type=gha
