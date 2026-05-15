@@ -10,9 +10,9 @@
 | Base de datos Odoo admin | `postgres` (filtro: `^admin$`) |
 | Namespace portal / postgres | `aeisoftware` |
 | Deployment portal | `portal` |
-| Imagen portal | `ghcr.io/jpvargassoruco/odoo-saas-mvp/portal:latest` |
-| Repo en initContainer | `https://github.com/jpvargassoruco/odoo-saas-mvp.git` (branch `main`, `--depth=1`) |
-| Addons copiados | `payment_qr_mercantil`, `odoo_k8s_saas`, `odoo_k8s_saas_subscription` (del repo principal) + `subscription_oca` (clonado de [odoo18-oca-contract](https://github.com/jpvargassoruco/odoo18-oca-contract)) |
+| Imagen portal | `ghcr.io/ribentek/aei-odoo-saas/portal:latest` |
+| Repo en initContainer | `https://github.com/Ribentek/aei-odoo-saas.git` (branch `main`, `--depth=1`) |
+| Addons copiados | `payment_qr_mercantil`, `odoo_k8s_saas`, `odoo_k8s_saas_subscription` (del repo principal) + `subscription_oca` (local en `external_addons/`) |
 [cert-manager]: https://cert-manager.io/
 
 ---
@@ -106,7 +106,7 @@ kubectl logs -n aeisoftware statefulset/postgres -f --tail=50
 | `payment_qr_mercantil` | Manual | Pago por QR — Banco Mercantil Santa Cruz (mc4.com.bo) |
 | `odoo_k8s_saas` | Manual | UI admin de instancias SaaS sobre K8s |
 | `odoo_k8s_saas_subscription` | Manual | Bridge suscripciones OCA ↔ SaaS instances |
-| `subscription_oca` | Manual | Contratos recurrentes (fork OCA 18.0, clonado de repo externo) |
+| `subscription_oca` | Manual | Contratos recurrentes (local en `external_addons/`) |
 
 ---
 

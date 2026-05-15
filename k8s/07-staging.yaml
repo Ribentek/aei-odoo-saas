@@ -120,13 +120,12 @@ spec:
             - |
               echo "==> [STAGING] Cloning branch: $ADDON_GIT_BRANCH"
               AUTH="${GIT_TOKEN:+${GIT_TOKEN}@}"
-              git clone --depth=1 -b "$ADDON_GIT_BRANCH" "https://${AUTH}github.com/jpvargassoruco/odoo-saas-mvp.git" /tmp/repo
+              git clone --depth=1 -b "$ADDON_GIT_BRANCH" "https://${AUTH}github.com/Ribentek/aei-odoo-saas.git" /tmp/repo
               cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
               cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
               cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/
-              # OCA subscription
-              git clone --depth=1 -b 18.0 "https://${AUTH}github.com/jpvargassoruco/odoo18-oca-contract.git" /tmp/oca-contract
-              cp -r /tmp/oca-contract/subscription_oca /mnt/extra-addons/
+              # Local subscription_oca (no longer external clone)
+              cp -r /tmp/repo/external_addons/subscription_oca /mnt/extra-addons/
               # MUK modules
               git clone --depth=1 -b 19.0 "https://${AUTH}github.com/muk-it/muk_base.git" /tmp/muk-base
               for d in /tmp/muk-base/muk_*/; do
@@ -322,7 +321,7 @@ spec:
       serviceAccountName: saas-portal
       containers:
         - name: portal
-          image: ghcr.io/jpvargassoruco/odoo-saas-mvp/portal:main
+          image: ghcr.io/ribentek/aei-odoo-saas/portal:main
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

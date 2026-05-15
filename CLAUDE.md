@@ -28,7 +28,7 @@ Three layers work together:
 
 3. **Kubernetes Manifests** (`k8s/`) — Applied in lexical order (00-08). Each tenant gets its own namespace (`odoo-{tenant_id}`), PVC, secrets, deployment, service, ingress, and network policy.
 
-**External dependency:** OCA contract/subscription modules cloned at deploy time from `https://github.com/jpvargassoruco/odoo18-oca-contract.git` (branch 18.0) by init containers. Local copy in `tmp-oca/` for reference only.
+**External dependency:** OCA contract/subscription modules included in `external_addons/` (rama 18.0). No longer cloned at deploy time.
 
 ## Plan Tiers (portal/k8s_utils/manifests.py)
 
@@ -84,7 +84,7 @@ kubectl logs -n odoo-admin -l app=odoo-admin -f
 kubectl rollout restart deployment/portal -n aeisoftware
 
 # Portal: build and deploy
-docker build -t ghcr.io/jpvargassoruco/portal:main portal/
+docker build -t ghcr.io/ribentek/aei-odoo-saas/portal:main portal/
 kubectl rollout restart deployment/portal -n aeisoftware
 ```
 

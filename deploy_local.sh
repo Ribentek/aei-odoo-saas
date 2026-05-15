@@ -11,7 +11,7 @@ echo "Updating Odoo database module on $POD..."
 kubectl exec -n odoo-admin $POD -- odoo -u odoo_k8s_saas -d admin --stop-after-init || echo "Module update reported an error, but continuing..."
 
 echo "Patching Portal deployment image to feature branch..."
-kubectl set image deployment/portal portal=ghcr.io/jpvargassoruco/odoo-saas-mvp/portal:feature-multi-version-support -n aeisoftware
+kubectl set image deployment/portal portal=ghcr.io/ribentek/aei-odoo-saas/portal:feature-multi-version-support -n aeisoftware
 kubectl rollout restart deployment/portal -n aeisoftware
 kubectl rollout status deployment/portal -n aeisoftware --timeout=180s
 echo "Done!"

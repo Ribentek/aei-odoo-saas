@@ -90,14 +90,13 @@ spec:
             - -c
             - |
               echo "==> Cloning branch: $ADDON_GIT_BRANCH"
-              # Clone SaaS repo (base addons + payment_qr_mercantil)
-              git clone --depth=1 -b "$ADDON_GIT_BRANCH" https://github.com/jpvargassoruco/odoo-saas-mvp.git /tmp/repo
+              # Clone SaaS repo (base addons + payment_qr_mercantil + local OCA)
+              git clone --depth=1 -b "$ADDON_GIT_BRANCH" https://github.com/Ribentek/aei-odoo-saas.git /tmp/repo
               cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
               cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
               cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/
-              # Clone subscription_oca from OCA fork
-              git clone --depth=1 -b 18.0 https://github.com/jpvargassoruco/odoo18-oca-contract.git /tmp/oca-contract
-              cp -r /tmp/oca-contract/subscription_oca /mnt/extra-addons/
+              # Local subscription_oca (no longer external clone)
+              cp -r /tmp/repo/external_addons/subscription_oca /mnt/extra-addons/
               # Clone MUK modules (v19.0)
               git clone --depth=1 -b 19.0 https://github.com/muk-it/muk_base.git /tmp/muk-base
               for d in /tmp/muk-base/muk_*/; do
