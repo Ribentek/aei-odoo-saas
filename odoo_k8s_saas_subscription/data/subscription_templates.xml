@@ -16,7 +16,7 @@
 
         <!-- ── SaaS Odoo 17 Custom Template ────────────────────────── -->
         <record id="subscription_template_saas_17_custom" model="sale.subscription.template">
-            <field name="name">SaaS Odoo 17 Custom (Monthly)</field>
+            <field name="name">AEI SaaS Starter Odoo 17.0 (Mensual)</field>
             <field name="is_saas_plan" eval="True"/>
             <field name="recurring_interval">1</field>
             <field name="recurring_rule_type">months</field>
