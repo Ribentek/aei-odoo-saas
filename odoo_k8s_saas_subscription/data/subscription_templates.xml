@@ -14,6 +14,19 @@
             <field name="storage_gi">10</field>
         </record>
 
+        <!-- ── SaaS Odoo 17 Custom Template ────────────────────────── -->
+        <record id="subscription_template_saas_17_custom" model="sale.subscription.template">
+            <field name="name">SaaS Odoo 17 Custom (Monthly)</field>
+            <field name="is_saas_plan" eval="True"/>
+            <field name="recurring_interval">1</field>
+            <field name="recurring_rule_type">months</field>
+            <field name="included_users">3</field>
+            <field name="price_per_extra_user">5.0</field>
+            <field name="plan">starter</field>
+            <field name="storage_gi">10</field>
+            <field name="product_id" ref="odoo_k8s_saas_subscription.product_saas_17_custom"/>
+        </record>
+
         <record id="subscription_template_saas_pro" model="sale.subscription.template">
             <field name="name">SaaS Pro (Monthly)</field>
             <field name="is_saas_plan" eval="True"/>

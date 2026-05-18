@@ -164,11 +164,12 @@ without_demo = True
 
 
 
-def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image: str | None = None, plan: str = "starter") -> dict[str, Any]:
+def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image: str | None = None, plan: str = "starter", install_modules: str = "") -> dict[str, Any]:
     pg_user = f"odoo-{tenant_id}"
     db_name = _dbname(tenant_id)
     active_image = custom_image if custom_image else f"odoo:{odoo_version}"
     res = PLAN_RESOURCES.get(plan, PLAN_RESOURCES["starter"])
+    init_modules = f"base,{install_modules}" if install_modules else "base"
     # Shared volume mounts and env used by both init and main containers
     _vol_mounts = [
         {"name": "odoo-conf", "mountPath": "/etc/odoo"},
@@ -308,10 +309,10 @@ def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image
                                 "WHERE table_schema='public' AND table_name='ir_module_module'\" "
                                 f"2>/dev/null || true); "
                                 "if [ \"$DB_INIT\" = \"1\" ]; then "
-                                f"  echo 'DB {db_name} already has Odoo schema, skipping --init=base'; "
+                                f"  echo 'DB {db_name} already has Odoo schema, skipping --init={init_modules}'; "
                                 "else "
                                 "  echo 'Initializing Odoo schema for the first time...'; "
-                                "  odoo --config=/etc/odoo/odoo.conf --init=base --stop-after-init && "
+                                f"  odoo --config=/etc/odoo/odoo.conf --init={init_modules} --stop-after-init && "
                                 "  echo \"env.ref('base.user_admin').write({'password': '${APP_ADMIN_PASSWORD}'}); env.cr.commit()\" "
                                 "    | odoo shell --config=/etc/odoo/odoo.conf; "
                                 "fi"
@@ -604,6 +605,7 @@ def all_manifests(
     custom_image: str | None = None,
     plan: str = "starter",
     git_token: str = "",
+    install_modules: str = "",
 ) -> list[dict]:
     """Return all manifests in apply-order."""
     manifests = [
@@ -618,7 +620,7 @@ def all_manifests(
     if git_token:
         manifests.append(git_secret_manifest(tenant_id, git_token))
     manifests += [
-        deployment_manifest(tenant_id, odoo_version, custom_image, plan=plan),
+        deployment_manifest(tenant_id, odoo_version, custom_image, plan=plan, install_modules=install_modules),
         service_manifest(tenant_id),
         ingress_manifest(tenant_id),
         pdb_manifest(tenant_id),

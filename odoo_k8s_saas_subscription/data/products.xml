@@ -18,5 +18,25 @@
             <field name="website_published" eval="False"/>
             <field name="description_sale">Additional active users beyond the plan's included amount. Billed monthly.</field>
         </record>
+
+        <!-- ── SaaS Odoo 17 Custom Product ────────────────────────────── -->
+        <record id="product_saas_17_custom" model="product.product">
+            <field name="name">SaaS Odoo 17 Custom</field>
+            <field name="type">service</field>
+            <field name="list_price">50.0</field>
+            <field name="sale_ok" eval="True"/>
+            <field name="odoo_version">custom</field>
+            <field name="custom_image">ghcr.io/ribentek/aei-odoo-saas/odoo-17-custom:latest</field>
+            <field name="install_modules">commission,account_reconcile,odoo_facturacion_bo,odoo_ribentek_ai</field>
+            <field name="addons_repos_json">[
+                {"url": "https://github.com/OCA/commission.git", "branch": "17.0"},
+                {"url": "https://github.com/OCA/account-reconcile.git", "branch": "17.0"},
+                {"url": "https://github.com/OCA/server-tools.git", "branch": "17.0"},
+                {"url": "https://github.com/muk-it/odoo-modules.git", "branch": "17.0"},
+                {"url": "https://github.com/Ribentek/odoo_facturacion_bo.git", "branch": "main"},
+                {"url": "https://github.com/Ribentek/odoo_ribentek_ai.git", "branch": "main"}
+            ]</field>
+            <field name="description_sale">Odoo 17 Custom Instance with OCA and Ribentek AI modules pre-installed.</field>
+        </record>
     </data>
 </odoo>

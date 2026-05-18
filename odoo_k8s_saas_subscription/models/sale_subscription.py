@@ -222,6 +222,8 @@ class SaleSubscription(models.Model):
             "subscription_id": self.id,
             "odoo_version": saas_product.odoo_version if saas_product else "18.0",
             "custom_image": saas_product.custom_image if saas_product else False,
+            "install_modules": saas_product.install_modules if saas_product else False,
+            "addons_repos_json": saas_product.addons_repos_json if saas_product else "[]",
         })
 
         logger.info(
@@ -472,6 +474,8 @@ class SaleSubscription(models.Model):
                             "subscription_id": rec.id,
                             "odoo_version": saas_product.odoo_version if saas_product else "18.0",
                             "custom_image": saas_product.custom_image if saas_product else False,
+                            "install_modules": saas_product.install_modules if saas_product else False,
+                            "addons_repos_json": saas_product.addons_repos_json if saas_product else "[]",
                         })
                         logger.info(
                             "Created saas.instance %s (version=%s) from "

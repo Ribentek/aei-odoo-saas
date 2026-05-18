@@ -13,3 +13,14 @@ class ProductTemplate(models.Model):
 
     custom_image = fields.Char(string="Custom Odoo Image",
                                help="e.g. ghcr.io/my-org/my-odoo:18.0. Only used if Odoo Version is Custom.")
+
+    install_modules = fields.Char(
+        string="Install Modules",
+        help="Comma-separated list of modules to install on DB creation (e.g., 'commission,account_reconcile').",
+    )
+    addons_repos_json = fields.Text(
+        string="Addon Repositories",
+        default="[]",
+        help='JSON array of {"url": "...", "branch": "..."} objects. '
+             'These repos are git-cloned into the tenant pod on provision.',
+    )

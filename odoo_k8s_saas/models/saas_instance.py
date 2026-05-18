@@ -83,6 +83,10 @@ class SaasInstance(models.Model):
         help='JSON array of {"url": "...", "branch": "..."} objects. '
              'These repos are git-cloned into the tenant pod on provision.',
     )
+    install_modules = fields.Char(
+        string="Install Modules",
+        help="Comma-separated list of modules to install on DB creation (e.g., 'commission,account_reconcile').",
+    )
 
     _sql_constraints = [
         ("tenant_id_unique", "UNIQUE(tenant_id)", "Tenant ID must be unique."),
@@ -206,6 +210,7 @@ class SaasInstance(models.Model):
                 "storage_gi": self.storage_gi,
                 "odoo_version": self.odoo_version or "18.0",
                 "custom_image": self.custom_image if self.custom_image else None,
+                "install_modules": self.install_modules or "",
             }
             # Include addon repos if configured
             if self.addons_repos_json:

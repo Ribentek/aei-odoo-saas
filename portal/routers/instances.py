@@ -106,6 +106,7 @@ class CreateInstanceRequest(BaseModel):
     addons_repos: list = []
     odoo_version: str = "18.0"
     custom_image: str | None = None
+    install_modules: str = ""
 
     @field_validator("tenant_id")
     @classmethod
@@ -237,6 +238,7 @@ def create_instance(req: CreateInstanceRequest, background_tasks: BackgroundTask
         custom_image=req.custom_image,
         plan=req.plan,
         git_token=GIT_TOKEN,
+        install_modules=req.install_modules,
     )
 
     for m in manifests:
