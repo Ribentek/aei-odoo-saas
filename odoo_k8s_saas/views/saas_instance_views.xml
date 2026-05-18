@@ -122,6 +122,7 @@
               <field name="storage_gi"/>
               <field name="odoo_version"/>
               <field name="custom_image" invisible="odoo_version != 'custom'"/>
+              <field name="install_modules" placeholder="e.g. aei_setup"/>
               <field name="url" widget="url" readonly="1"/>
               <field name="namespace" readonly="1"/>
             </group>
