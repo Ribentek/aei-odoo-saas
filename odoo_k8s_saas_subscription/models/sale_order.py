@@ -39,8 +39,7 @@ class SaleOrder(models.Model):
             existing_line = self.order_line.filtered(lambda l: l.product_id.id == product_id)
             if existing_line:
                 info_msg = _(
-                    "Has agregado este plan nuevamente. "
-                    "Cada unidad representa un mes adicional de suscripción prepagada."
+                    "Has agregado un mes más a la subscripción."
                 )
                 warning = (warning + " " + info_msg) if warning else info_msg
 
