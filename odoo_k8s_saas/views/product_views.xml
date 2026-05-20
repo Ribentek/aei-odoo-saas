@@ -11,7 +11,7 @@
                         <group name="saas_settings" string="Provisioning Options">
                             <field name="odoo_version"/>
                             <field name="custom_image" invisible="odoo_version != 'custom'"/>
-                            <field name="install_modules" placeholder="e.g. aei_setup"/>
+                            <field name="install_modules" placeholder="e.g. aei_setup" invisible="False"/>
                         </group>
                     </group>
                 </page>
