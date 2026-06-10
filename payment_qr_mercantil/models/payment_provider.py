@@ -111,6 +111,11 @@ class PaymentProvider(models.Model):
             'Si se deja vacío se usa el dominio configurado en Ajustes → Parámetros técnicos → web.base.url'
         ),
     )
+    qr_mercantil_ssl_verify = fields.Boolean(
+        string='Verificar SSL',
+        default=True,
+        help='Desactivar solo para ambientes de desarrollo con certificados autofirmados.',
+    )
     # Modo demo/test: se controla con el campo nativo `state` de Odoo.
     # Cuando state == 'test' el proveedor opera en modo demo (sin llamadas reales al banco).
     # Ver: _qr_mercantil_generate_qr(), _qr_mercantil_get_status(), _qr_mercantil_get_token().
@@ -200,7 +205,7 @@ class PaymentProvider(models.Model):
                     'password': self.qr_mercantil_password,
                 },
                 timeout=15,
-                verify=True,
+                verify=self.qr_mercantil_ssl_verify,
             )
             _logger.info(
                 "QR Mercantil: respuesta token → status=%s body=%s",
@@ -269,7 +274,7 @@ class PaymentProvider(models.Model):
             'alias': alias,
             'callback': callback_url,
             'detalleGlosa': description,
-            'monto': float(amount),
+            'monto': f"{float(amount):.2f}",
             'moneda': currency_name,
             'fechaVencimiento': due_date,
             'tipoSolicitud': 'API',
@@ -291,7 +296,7 @@ class PaymentProvider(models.Model):
                 },
                 json=payload,
                 timeout=15,
-                verify=True,
+                verify=self.qr_mercantil_ssl_verify,
             )
             _logger.info(
                 "QR Mercantil: respuesta generaQr → status=%s body=%s",
@@ -335,7 +340,7 @@ class PaymentProvider(models.Model):
                 },
                 json={'alias': alias},
                 timeout=15,
-                verify=True,
+                verify=self.qr_mercantil_ssl_verify,
             )
             resp.raise_for_status()
             return resp.json()

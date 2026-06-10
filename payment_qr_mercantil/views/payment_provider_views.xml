@@ -38,6 +38,9 @@
                         <field name="qr_mercantil_password"
                                string="Contraseña API"
                                password="True"/>
+                        <field name="qr_mercantil_ssl_verify"
+                               string="Verificar SSL"
+                               help="Desactivar solo en ambientes DEV con certificados autofirmados."/>
                     </group>
                 </group>
             </xpath>
