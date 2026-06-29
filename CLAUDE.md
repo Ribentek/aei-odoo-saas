@@ -36,6 +36,26 @@ Starter: 2 workers, 100m-500m CPU, 512Mi-1Gi RAM
 Pro: 4 workers, 250m-1 CPU, 1Gi-2Gi RAM
 Enterprise: 8 workers, 500m-2 CPU, 2Gi-4Gi RAM
 
+## Cluster Access (SSH)
+
+kubectl no está disponible localmente — todos los comandos se ejecutan vía SSH al nodo control del clúster K3s.
+
+```bash
+# Conexión al nodo control (verificar que la clave existe antes de usar)
+SSH_CMD="ssh -i /tmp/k3s_rsa -o StrictHostKeyChecking=no ubuntu@10.40.2.158"
+
+# Verificar nodos
+$SSH_CMD "kubectl get nodes"
+```
+
+| Parámetro | Valor |
+|-----------|-------|
+| Clave SSH | `/tmp/k3s_rsa` |
+| Usuario | `ubuntu` |
+| Nodo control | `10.40.2.158` (k3s-control-1) |
+
+> **NOTA:** La clave `/tmp/k3s_rsa` vive en `/tmp/` — verificar que existe al inicio de cada sesión.
+
 ## Key Deployment Commands
 
 > **IMPORTANTE — Entornos distintos:**
@@ -43,7 +63,13 @@ Enterprise: 8 workers, 500m-2 CPU, 2Gi-4Gi RAM
 > - **Producción** (`18.0` branch): namespace `odoo-admin`, deployment `odoo-admin`, DB `admin`, portal `portal`
 > - NUNCA usar comandos de `odoo-admin` para staging ni viceversa.
 
+> **IMPORTANTE — Addon deployment:** El pod de Odoo tiene un init container que clona el branch correspondiente de GitHub al arrancar. No hay imagen Docker que reconstruir para cambios de addons — solo hacer push y rollout restart.
+
+> **IMPORTANTE — `--no-http`:** Siempre usar `--no-http` al actualizar módulos con `odoo -u` dentro del pod, porque el proceso principal ya ocupa el puerto 8069.
+
 ```bash
+SSH="ssh -i /tmp/k3s_rsa -o StrictHostKeyChecking=no ubuntu@10.40.2.158"
+
 # Deploy infrastructure (first time)
 bash infra/install-k3s.sh
 bash infra/install-traefik.sh
@@ -55,27 +81,23 @@ DB_PASSWORD="..." API_KEY="..." ./dev-setup.sh
 
 # ── STAGING (namespace: staging, branch: main) ──────────────────────────────
 # Restart Odoo staging after code changes
-kubectl rollout restart deployment/odoo-stg -n staging
-kubectl rollout status deployment/odoo-stg -n staging
+$SSH "kubectl rollout restart deployment/odoo-stg -n staging && kubectl rollout status deployment/odoo-stg -n staging"
 
 # Update Odoo module schema on staging
-POD=$(kubectl get pod -n staging -l app=odoo-stg -o jsonpath='{.items[0].metadata.name}')
-kubectl exec -n staging $POD -- odoo -u <module_name> -d staging --stop-after-init
+$SSH "POD=\$(kubectl get pod -n staging -l app=odoo-stg -o jsonpath='{.items[0].metadata.name}') && kubectl exec -n staging \$POD -- odoo -u <module_name> -d staging --stop-after-init --no-http"
 
 # Tail staging logs
-kubectl logs -n staging -l app=odoo-stg -f
+$SSH "kubectl logs -n staging -l app=odoo-stg -f"
 
 # Restart portal staging
-kubectl rollout restart deployment/portal-stg -n staging
+$SSH "kubectl rollout restart deployment/portal-stg -n staging"
 
 # ── PRODUCCIÓN (namespace: odoo-admin, branch: 18.0) ────────────────────────
 # Restart Odoo production after code changes
-kubectl rollout restart deployment/odoo-admin -n odoo-admin
-kubectl rollout status deployment/odoo-admin -n odoo-admin
+$SSH "kubectl rollout restart deployment/odoo-admin -n odoo-admin && kubectl rollout status deployment/odoo-admin -n odoo-admin"
 
 # Update Odoo module schema on production
-POD=$(kubectl get pod -n odoo-admin -l app=odoo-admin -o jsonpath='{.items[0].metadata.name}')
-kubectl exec -n odoo-admin $POD -- odoo -u <module_name> -d admin --stop-after-init
+$SSH "POD=\$(kubectl get pod -n odoo-admin -l app=odoo-admin -o jsonpath='{.items[0].metadata.name}') && kubectl exec -n odoo-admin \$POD -- odoo -u <module_name> -d admin --stop-after-init --no-http"
 
 # Tail production logs
 kubectl logs -n odoo-admin -l app=odoo-admin -f
