@@ -42,7 +42,7 @@ kubectl no está disponible localmente — todos los comandos se ejecutan vía S
 
 ```bash
 # Conexión al nodo control (verificar que la clave existe antes de usar)
-SSH_CMD="ssh -i /tmp/k3s_rsa -o StrictHostKeyChecking=no ubuntu@10.40.2.158"
+SSH_CMD="ssh -i .secrets/k3s_rsa -o StrictHostKeyChecking=no ubuntu@10.40.2.158"
 
 # Verificar nodos
 $SSH_CMD "kubectl get nodes"
@@ -50,11 +50,13 @@ $SSH_CMD "kubectl get nodes"
 
 | Parámetro | Valor |
 |-----------|-------|
-| Clave SSH | `/tmp/k3s_rsa` |
+| Clave SSH | `.secrets/k3s_rsa` (dentro del repo, gitignored — no se sube a GitHub) |
 | Usuario | `ubuntu` |
 | Nodo control | `10.40.2.158` (k3s-control-1) |
 
-> **NOTA:** La clave `/tmp/k3s_rsa` vive en `/tmp/` — verificar que existe al inicio de cada sesión.
+> **NOTA:** La clave vive en `.secrets/k3s_rsa` (repo-local, en `.gitignore`) en vez de `/tmp/`
+> para que no se pierda si se limpia `/tmp` entre sesiones. Si no existe, copiarla desde
+> `/tmp/k3s_rsa` (respaldo) o pedirla al usuario.
 
 ## Key Deployment Commands
 
@@ -133,7 +135,11 @@ GitHub Actions builds portal Docker image on push to main/18.0. Tags: `:main`, `
 
 ## Testing
 
-No automated test suite in the main repo. QA is manual per the test battery in README.md (admin + tenant perspective). OCA modules in `tmp-oca/` have their own Odoo test framework tests.
+No automated test suite in the main repo. QA is manual per the test battery in README.md (admin + tenant perspective). OCA modules in `external_addons/` have their own Odoo test framework tests.
+
+## Documentation Wiki
+
+Full documentation (HLD, LLD, runbooks, API reference, QA battery) lives in the GitHub wiki: `https://github.com/Ribentek/aei-odoo-saas/wiki`. Business analysis reports live in `docs/`.
 
 ## Security Patterns
 

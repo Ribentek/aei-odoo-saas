@@ -11,9 +11,25 @@
 | Namespace portal / postgres | `aeisoftware` |
 | Deployment portal | `portal` |
 | Imagen portal | `ghcr.io/ribentek/aei-odoo-saas/portal:latest` |
-| Repo en initContainer | `https://github.com/Ribentek/aei-odoo-saas.git` (branch `main`, `--depth=1`) |
+| Repo en initContainer | `https://github.com/Ribentek/aei-odoo-saas.git` (branch `18.0`, `--depth=1`) |
 | Addons copiados | `payment_qr_mercantil`, `odoo_k8s_saas`, `odoo_k8s_saas_subscription` (del repo principal) + `subscription_oca` (local en `external_addons/`) |
 [cert-manager]: https://cert-manager.io/
+
+---
+
+## Entorno de staging
+
+| Elemento | Valor |
+|---|---|
+| Namespace Odoo staging | `staging` |
+| Deployment Odoo | `odoo-stg` |
+| Label selector | `app=odoo-stg` |
+| Base de datos Odoo staging | `staging` |
+| Namespace / deployment portal | `staging` / `portal-stg` |
+| Dominio | staging.aeisoftware.com |
+| Repo en initContainer | `https://github.com/Ribentek/aei-odoo-saas.git` (branch `main`, `--depth=1`) |
+
+> **Nunca mezclar comandos:** namespace `staging` usa branch `main`; namespace `odoo-admin` usa branch `18.0`.
 
 ---
 
@@ -26,13 +42,13 @@ Si un cliente requiere Odoo con módulos pre-instalados (baked-in), la imagen de
 
 ---
 
-## Flujo de despliegue estándar
+## Flujo de despliegue estándar — Producción (branch `18.0`)
 
 ```bash
-# 1. Commit y push del código
+# 1. Commit y push del código (a 18.0, tras validar en staging)
 git add <archivos>
 git commit -m "tipo(módulo): descripción"
-git push origin main
+git push origin 18.0
 
 # 2. Restart — el initContainer clona el repo actualizado automáticamente
 kubectl rollout restart deployment/odoo-admin -n odoo-admin
@@ -46,9 +62,31 @@ kubectl rollout status deployment/odoo-admin -n odoo-admin
 
 ---
 
+## Flujo de despliegue — Staging (branch `main`)
+
+```bash
+# 1. Commit y push del código a main
+git add <archivos>
+git commit -m "tipo(módulo): descripción"
+git push origin main
+
+# 2. Restart — el initContainer clona main automáticamente
+kubectl rollout restart deployment/odoo-stg -n staging
+
+# 3. Esperar a que el pod esté Running
+kubectl rollout status deployment/odoo-stg -n staging
+```
+
+> Todo cambio va primero a `main`/staging, se valida ahí, y luego se mergea a `18.0` para producción.
+> Igual que en producción: ningún módulo se auto-actualiza, el container inicia sin flag `-u`.
+
+---
+
 ## Cuando hay cambios de esquema BD (campos nuevos en modelos)
 
 > ⚠️ Obligatorio tras agregar o renombrar `fields.*` en cualquier modelo Odoo.
+
+### Producción (namespace `odoo-admin`, DB `admin`)
 
 ```bash
 # 1. Obtener nombre del pod (tras el rollout restart)
@@ -68,6 +106,29 @@ kubectl rollout restart deployment/odoo-admin -n odoo-admin
 kubectl rollout status deployment/odoo-admin -n odoo-admin
 ```
 
+### Staging (namespace `staging`, DB `staging`)
+
+```bash
+# 1. Obtener nombre del pod (tras el rollout restart)
+POD=$(kubectl get pod -n staging -l app=odoo-stg -o jsonpath='{.items[0].metadata.name}')
+
+# 2. Actualizar el módulo afectado
+kubectl exec -n staging $POD -- \
+  odoo -u payment_qr_mercantil -d staging --stop-after-init --no-http
+
+# 3. Para actualizar TODOS los módulos del repo:
+kubectl exec -n staging $POD -- \
+  odoo -u payment_qr_mercantil,odoo_k8s_saas,odoo_k8s_saas_subscription,subscription_oca \
+  -d staging --stop-after-init --no-http
+
+# 4. Restart limpio tras el update
+kubectl rollout restart deployment/odoo-stg -n staging
+kubectl rollout status deployment/odoo-stg -n staging
+```
+
+> El flag `--no-http` es obligatorio en ambos entornos: sin él falla con `[Errno 98] Address already in use`
+> porque el proceso principal ya ocupa el puerto 8069.
+
 ---
 
 ## Portal FastAPI
@@ -86,12 +147,18 @@ kubectl rollout status deployment/portal -n aeisoftware
 ## Verificar logs en tiempo real
 
 ```bash
-# Odoo admin
+# Odoo admin (producción)
 POD=$(kubectl get pod -n odoo-admin -l app=odoo-admin -o jsonpath='{.items[0].metadata.name}')
 kubectl logs -n odoo-admin $POD -f --tail=100
 
-# Portal FastAPI
+# Odoo staging
+kubectl logs -n staging -l app=odoo-stg -f --tail=100
+
+# Portal FastAPI (producción)
 kubectl logs -n aeisoftware deployment/portal -f --tail=100
+
+# Portal FastAPI (staging)
+kubectl logs -n staging deployment/portal-stg -f --tail=100
 
 # PostgreSQL
 kubectl logs -n aeisoftware statefulset/postgres -f --tail=50
@@ -115,20 +182,25 @@ kubectl logs -n aeisoftware statefulset/postgres -f --tail=50
 ```bash
 # Estado general de pods
 kubectl get pods -n odoo-admin
+kubectl get pods -n staging
 kubectl get pods -n aeisoftware
 
 # Describir pod (ver errores de initContainer)
 kubectl describe pod -n odoo-admin <pod-name>
+kubectl describe pod -n staging <pod-name>
 
 # Verificar secrets aplicados
 kubectl get secrets -n odoo-admin
+kubectl get secrets -n staging
 kubectl get secrets -n aeisoftware
 
 # PVCs
 kubectl get pvc -n odoo-admin
+kubectl get pvc -n staging
 
 # IngressRoutes
 kubectl get ingress -n odoo-admin
+kubectl get ingress -n staging
 kubectl get ingress -n aeisoftware
 ```
 
@@ -274,8 +346,9 @@ kubectl logs -n backup-system -l app=pg-logical-dump -f
 
 ## Notas importantes
 
-- El initContainer `copy-addon` clona `main` con `--depth=1` en **cada restart** del pod.
-  Siempre hacer `push` **antes** de `rollout restart`.
+- El initContainer `copy-addon` clona el branch del pod (`main` en staging, `18.0` en producción)
+  con `--depth=1` en **cada restart** del pod. Siempre hacer `push` **antes** de `rollout restart`.
+  Nunca mezclar comandos de `odoo-admin` con los de `staging` ni viceversa.
 - **Ningún módulo se auto-actualiza.** El container Odoo inicia sin flag `-u`.
   Correr el comando `odoo -u <módulo> --stop-after-init --no-http` manualmente tras cambios de esquema.
   El flag `--no-http` es obligatorio: sin él falla con `[Errno 98] Address already in use` porque el proceso principal ya ocupa el puerto 8069.
