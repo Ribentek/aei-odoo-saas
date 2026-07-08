@@ -848,56 +848,11 @@ class SaleSubscription(models.Model):
                     sub.display_name, extra, price,
                 )
 
-    def generate_invoice(self):
-        """Override: after generating the renewal invoice, send a payment link email.
-
-        Only fires for SaaS subscriptions (template_id.is_saas_plan = True).
-        Uses the email_template_renewal_invoice template which includes a direct
-        portal payment link via account.move.get_portal_url().
-
-        The dunning sequence (levels 1-3 in _cron_suspend_overdue) serves as a
-        fallback if the customer misses this renewal notification.
-        """
-        invoice = super().generate_invoice()
-
-        # Only send for SaaS plans
-        if not (self.template_id and getattr(self.template_id, "is_saas_plan", False)):
-            return invoice
-
-        if not invoice:
-            return invoice
-
-        template = self.env.ref(
-            "odoo_k8s_saas_subscription.email_template_renewal_invoice",
-            raise_if_not_found=False,
-        )
-        if not template:
-            logger.warning(
-                "generate_invoice: renewal template not found — skipping email for %s",
-                self.display_name,
-            )
-            return invoice
-
-        # invoice may be a single record or a recordset
-        invoices = invoice if hasattr(invoice, "__iter__") and not isinstance(invoice, dict) else [invoice]
-        for inv in invoices:
-            try:
-                # Only send for confirmed/posted invoices with a partner email
-                if not getattr(inv, "partner_id", False) or not inv.partner_id.email:
-                    continue
-                template.send_mail(inv.id, force_send=True)
-                logger.info(
-                    "generate_invoice: renewal email sent for invoice %s (subscription %s)",
-                    inv.name if hasattr(inv, "name") else str(inv),
-                    self.display_name,
-                )
-            except Exception:
-                logger.exception(
-                    "generate_invoice: failed to send renewal email for invoice %s",
-                    inv,
-                )
-
-        return invoice
+    # NOTE: no generate_invoice override for emailing. With invoicing_mode
+    # 'invoice'/'invoice_send', subscription_oca already posts the invoice and
+    # emails it (PDF attached) using template_id.invoice_mail_template_id —
+    # which the SaaS templates point at email_template_renewal_invoice.
+    # A manual send here produced duplicate renewal emails.
 
     @api.model
     def cron_subscription_management(self):

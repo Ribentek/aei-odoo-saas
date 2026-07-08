@@ -1,29 +1,82 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <data noupdate="1">
+        <!-- Enviado cuando la instancia pasa a estado Ready
+             (webhook del portal, cron de reconciliación o chequeo manual). -->
         <record id="email_template_saas_credentials" model="mail.template">
-            <field name="name">SaaS: Instance Credentials</field>
+            <field name="name">SaaS: Credenciales de Acceso</field>
             <field name="model_id" ref="odoo_k8s_saas.model_saas_instance"/>
-            <field name="subject">Your Odoo Instance is Ready!</field>
+            <field name="subject">¡Tu sistema Odoo está listo! — Credenciales de acceso</field>
             <field name="email_from">{{ object.env.company.email_formatted }}</field>
             <field name="email_to">{{ object.partner_id.email_formatted }}</field>
+            <field name="auto_delete" eval="True"/>
             <field name="body_html" type="html">
-<div style="margin: 0px; padding: 0px;">
-    <p style="margin: 0px; padding: 0px; font-size: 13px;">
-        Hello <t t-out="object.partner_id.name or 'Customer'"/>,<br/><br/>
-        Great news! Your Odoo instance is now provisioned and ready to use.<br/><br/>
-        You can access your system here:<br/>
-        <strong>URL:</strong> <a t-attf-href="{{ object.url }}" t-out="object.url">https://domain.com</a><br/><br/>
-        Here are your superadmin credentials:<br/>
-        <strong>Username:</strong> admin<br/>
-        <strong>Password:</strong> <t t-out="object.admin_password or ''"/><br/><br/>
-        Please log in and change your password as soon as possible.<br/><br/>
-        Best regards,<br/>
-        The AEI Software Team
-    </p>
+<div style="margin: 0; padding: 0;">
+    <table width="600" style="margin: 20px auto; font-family: Arial, sans-serif; border-collapse: collapse;">
+        <tr>
+            <td style="background-color: #1A2238; padding: 20px; color: #fff; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0; font-size: 22px;">&#127881; ¡Tu sistema Odoo está listo!</h1>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 30px; background-color: #f9f9f9; border: 1px solid #ddd;">
+                <p>Hola <strong><t t-out="object.partner_id.name or 'Cliente'"/></strong>,</p>
+
+                <p>Tu sistema Odoo ya está aprovisionado y funcionando.
+                Aquí tienes todo lo necesario para empezar:</p>
+
+                <table style="width: 100%; margin: 20px 0; border-collapse: collapse; border: 1px solid #ddd;">
+                    <tr style="background-color: #1A2238; color: #fff;">
+                        <td style="padding: 10px; font-weight: bold;" colspan="2">Datos de acceso</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold; width: 40%;">URL de tu sistema:</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                            <a t-attf-href="{{ object.url }}" style="color: #6C63FF; font-weight: bold;"><t t-out="object.url"/></a>
+                        </td>
+                    </tr>
+                    <tr style="background-color: #f9f9f9;">
+                        <td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Usuario:</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #eee;"><code>admin</code></td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Contraseña:</td>
+                        <td style="padding: 8px;"><code style="background: #EEF0FF; padding: 2px 8px; border-radius: 4px;"><t t-out="object.admin_password or ''"/></code></td>
+                    </tr>
+                </table>
+
+                <div style="background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 15px; margin: 20px 0;">
+                    <strong>&#128274; Importante — Seguridad</strong><br/>
+                    Cambia esta contraseña en tu primer ingreso
+                    (Ajustes &#8594; Usuarios &#8594; admin) y guárdala en un lugar seguro.
+                    Este correo se elimina de nuestros servidores tras el envío.
+                </div>
+
+                <p style="text-align: center; margin: 30px 0;">
+                    <a t-attf-href="{{ object.url }}"
+                       style="background-color: #6C63FF; color: #fff; padding: 14px 36px;
+                              border-radius: 5px; text-decoration: none; font-weight: bold; font-size: 16px;">
+                        Ingresar a mi sistema
+                    </a>
+                </p>
+
+                <p><strong>Tu portal de cliente</strong> — gestiona todo desde un solo lugar:</p>
+                <ul>
+                    <li><a t-attf-href="{{ object.get_base_url() }}/my/subscriptions" style="color: #6C63FF;">Mi suscripción</a> — plan, facturas, backup diario descargable</li>
+                    <li><a t-attf-href="{{ object.get_base_url() }}/my/tickets" style="color: #6C63FF;">Soporte técnico</a> — crea tickets; tu plan incluye horas de soporte cada mes</li>
+                </ul>
+
+                <p>¡Bienvenido a bordo!<br/><strong>Equipo AEI Software</strong></p>
+            </td>
+        </tr>
+        <tr>
+            <td style="background-color: #555; padding: 15px; color: #aaa; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px;">
+                Mensaje automático de la plataforma AEI Software SaaS.
+            </td>
+        </tr>
+    </table>
 </div>
             </field>
-            <field name="auto_delete" eval="True"/>
         </record>
     </data>
 </odoo>

@@ -8,6 +8,8 @@
             <field name="is_saas_plan" eval="True"/>
             <field name="recurring_interval">1</field>
             <field name="recurring_rule_type">months</field>
+            <field name="invoicing_mode">invoice_send</field>
+            <field name="invoice_mail_template_id" ref="email_template_renewal_invoice"/>
             <field name="included_users">3</field>
             <field name="price_per_extra_user">5.0</field>
             <field name="support_hours_included">2.0</field>
@@ -40,6 +42,8 @@
             <field name="is_saas_plan" eval="True"/>
             <field name="recurring_interval">1</field>
             <field name="recurring_rule_type">months</field>
+            <field name="invoicing_mode">invoice_send</field>
+            <field name="invoice_mail_template_id" ref="email_template_renewal_invoice"/>
             <field name="included_users">10</field>
             <field name="price_per_extra_user">3.0</field>
             <field name="support_hours_included">5.0</field>
@@ -71,6 +75,8 @@
             <field name="is_saas_plan" eval="True"/>
             <field name="recurring_interval">1</field>
             <field name="recurring_rule_type">months</field>
+            <field name="invoicing_mode">invoice_send</field>
+            <field name="invoice_mail_template_id" ref="email_template_renewal_invoice"/>
             <field name="included_users">50</field>
             <field name="price_per_extra_user">2.0</field>
             <field name="support_hours_included">10.0</field>

@@ -46,7 +46,7 @@
                 para evitar la interrupción del servicio.</p>
 
                 <p style="text-align: center; margin: 30px 0;">
-                    <a t-attf-href="/my/subscriptions/{{ object.subscription_id.id }}"
+                    <a t-attf-href="{{ object.get_base_url() }}/my/subscriptions/{{ object.subscription_id.id }}"
                        style="background-color: #875A7B; color: #fff; padding: 12px 28px;
                               border-radius: 5px; text-decoration: none; font-weight: bold;">
                         Ver mi suscripción y pagar
@@ -112,7 +112,7 @@
                 </table>
 
                 <p style="text-align: center; margin: 30px 0;">
-                    <a t-attf-href="/my/subscriptions/{{ object.subscription_id.id }}"
+                    <a t-attf-href="{{ object.get_base_url() }}/my/subscriptions/{{ object.subscription_id.id }}"
                        style="background-color: #d9534f; color: #fff; padding: 14px 32px;
                               border-radius: 5px; text-decoration: none; font-weight: bold; font-size: 16px;">
                         Pagar ahora y mantener mi acceso
@@ -168,7 +168,7 @@
                 </div>
 
                 <p style="text-align: center; margin: 30px 0;">
-                    <a t-attf-href="/my/subscriptions/{{ object.subscription_id.id }}"
+                    <a t-attf-href="{{ object.get_base_url() }}/my/subscriptions/{{ object.subscription_id.id }}"
                        style="background-color: #875A7B; color: #fff; padding: 14px 32px;
                               border-radius: 5px; text-decoration: none; font-weight: bold; font-size: 16px;">
                         Pagar y reactivar mi instancia
