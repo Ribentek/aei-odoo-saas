@@ -65,7 +65,6 @@ class SaleSubscription(models.Model):
         digits="Product Price",
         help="Monthly charge for extra users (extra_users × price_per_extra_user).",
     )
-
     @api.depends("saas_instance_ids", "saas_instance_ids.state")
     def _compute_saas_instance_count(self):
         for rec in self:
@@ -86,7 +85,11 @@ class SaleSubscription(models.Model):
             active_instances = rec.saas_instance_ids.filtered(
                 lambda i: i.state not in ("deleted",)
             )
-            total_users = sum(active_instances.mapped("user_count"))
+            # user_count = -1 is the portal's connectivity-error sentinel;
+            # it must never subtract from the billable total.
+            total_users = sum(
+                c for c in active_instances.mapped("user_count") if c >= 0
+            )
             included = rec.template_id.included_users if rec.template_id else 0
             extra = max(0, total_users - included)
             price = rec.template_id.price_per_extra_user if rec.template_id else 0.0
@@ -731,6 +734,15 @@ class SaleSubscription(models.Model):
                     continue
                 data = resp.json()
                 user_count = data.get("user_count", 0)
+                if user_count < 0:
+                    # -1 = portal could not reach the tenant DB; keep the
+                    # last known good count instead of storing the sentinel.
+                    logger.warning(
+                        "_cron_sync_user_count: portal reported connectivity "
+                        "error for %s — keeping previous count %d",
+                        inst.tenant_id, inst.user_count,
+                    )
+                    continue
                 if user_count != inst.user_count:
                     inst.user_count = user_count
                     logger.info(
