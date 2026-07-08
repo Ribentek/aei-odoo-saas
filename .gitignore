@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 # Secrets — NEVER commit real passwords
 .secrets.env
+.secrets/
 .env
 .env.*
 !.env.example
@@ -29,3 +30,6 @@ infra/postgres-ha/.secrets.generated
 .vscode/
 *.swp
 backups/
+
+# AI tooling local state
+.antigravitycli/
