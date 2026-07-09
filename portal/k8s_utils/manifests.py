@@ -335,7 +335,18 @@ def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image
                                 f"  odoo --config=/etc/odoo/odoo.conf --init={init_modules} --stop-after-init && "
                                 "  echo \"env.ref('base.user_admin').write({'password': '${APP_ADMIN_PASSWORD}'}); env.cr.commit()\" "
                                 "    | odoo shell --config=/etc/odoo/odoo.conf; "
-                                "fi"
+                                "fi; "
+                                # Flush cached asset bundles on every start (not just first boot).
+                                # With imagePullPolicy=Always the running Odoo build can legitimately
+                                # change between restarts; stale ir.attachment rows compiled by a
+                                # different build can register core Owl templates (e.g. mail.Thread)
+                                # with mismatched content and break "loadBundle" bundles like
+                                # portal.assets_chatter (Missing template errors). Assets recompile
+                                # automatically on next request, so this is always safe.
+                                f"PGPASSWORD=$DB_PASSWORD psql -h {POSTGRES_HOST} -p {POSTGRES_PORT} "
+                                f"-U {pg_user} -d {db_name} "
+                                "-c \"DELETE FROM ir_attachment WHERE url LIKE '/web/assets/%'\" "
+                                "2>/dev/null || echo 'flush-asset-cache: skipped (DB not ready yet)'"
                             ],
                             "env": _init_env,
                             "volumeMounts": _vol_mounts,

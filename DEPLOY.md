@@ -362,10 +362,33 @@ kubectl logs -n backup-system -l app=pg-logical-dump -f
 > 3. **Cloudflare** (proxy de `aeisoftware.com`) cachea `/web/assets/*` en el edge → purgar el servidor
 >    no basta; las peticiones ni siquiera llegan a Odoo (`cf-cache-status: HIT`).
 
-### Procedimiento de saneamiento
+### Fix estructural (2026-07-09): auto-flush en cada arranque, en vez de fijar la imagen
 
-Ejecutarlo **siempre que cambie la imagen de Odoo** (nuevo digest del tag) y ante cualquier error de
-templates/assets inconsistentes:
+Se evaluó fijar `odoo:18` por digest (`odoo:18@sha256:...`), pero eso renuncia a los parches de
+seguridad que Odoo sigue publicando para la serie 18 durante ~1 año de soporte, y en la práctica el
+bump manual tiende a olvidarse. Además el estado *previo* (tag flotante + `imagePullPolicy` por
+defecto `IfNotPresent`) tampoco daba parches automáticos: cada nodo K3s descarga la imagen una vez y
+la retiene para siempre, así que los nodos divergían en silencio (se confirmó con evidencia real: el
+mismo día del incidente, un pod de `odoo-stg` se reprogramó a otro nodo por una falla no relacionada —
+ver "Notas importantes" — y ese nodo tenía un digest distinto de `odoo:18`, produciendo bundles con
+`mail.Thread` inconsistente sin que nadie tocara la imagen a propósito).
+
+En su lugar se implementó (commit posterior a `e62e9e7`):
+
+1. **`imagePullPolicy: Always`** en el contenedor `odoo` de `k8s/06-odoo-admin.yaml`,
+   `k8s/07-staging.yaml` y en `portal/k8s_utils/manifests.py` (tenants ya lo tenían) — cada restart
+   re-sincroniza con el `odoo:18` vigente en Docker Hub, autocorrigiendo el drift entre nodos y
+   manteniendo los parches de seguridad al día.
+2. **Init container `flush-asset-cache`** (nuevo, corre en cada arranque del pod, no solo en
+   incidentes) que borra `ir_attachment` con `url LIKE '/web/assets/%'` vía `psql` directo — usa la
+   misma imagen `odoo:18` del pod, así que nunca desincroniza con el build real que va a arrancar.
+   Es un no-op seguro en el primer boot (tabla vacía o inexistente, con `|| echo ...` de resguardo).
+   Los assets se recompilan solos en el siguiente request.
+
+Con esto el bug de plantillas Owl inconsistentes queda neutralizado sin importar *cuándo* ni *por qué*
+cambie la imagen (bump de Docker Hub, reschedule por falla de nodo, etc.), sin sacrificar parches.
+
+### Procedimiento manual de saneamiento (incidentes puntuales / verificación)
 
 ```bash
 # 1. Purgar bundles cacheados — STAGING (para producción: -n odoo-admin, app=odoo-admin, -d admin)
@@ -384,9 +407,6 @@ curl -s 'https://staging.aeisoftware.com/web/bundle/portal.assets_chatter?lang=e
 
 - Regla Cloudflare recomendada: **bypass de caché para `staging.aeisoftware.com`** (un entorno de pruebas
   no debe cachearse en CDN).
-- Pendiente estructural: fijar la imagen por digest (`odoo:18@sha256:...`) en `k8s/06-odoo-admin.yaml`,
-  `k8s/07-staging.yaml` y `portal/k8s_utils/manifests.py`, con bump deliberado + este procedimiento como
-  parte del runbook de actualización.
 
 ---
 
