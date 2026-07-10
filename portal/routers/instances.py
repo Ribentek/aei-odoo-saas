@@ -436,6 +436,29 @@ class ConfigUpdateRequest(BaseModel):
     odoo_conf: str = None
     addons_repos: list = None
 
+
+def _ensure_extra_addons_path(conf_text: str) -> str:
+    """Idempotently ensure addons_path includes /mnt/extra-addons.
+
+    Tenants provisioned before 2026-07-10 may have an odoo.conf whose
+    addons_path lacks this entry (configmap_manifest() used to only add it
+    when addons_repos was non-empty AT PROVISIONING TIME). Without it, addon
+    repos added later via "Sync Addons to Instance" get cloned to disk but
+    Odoo never sees them — see DEPLOY.md incident 2026-07-10. Returns
+    conf_text unchanged if the entry is already present or if there's no
+    addons_path line to patch.
+    """
+    if "addons_path" not in conf_text:
+        return conf_text
+
+    def _add(match: "re.Match") -> str:
+        entries = [e.strip() for e in match.group(1).split(",") if e.strip()]
+        if "/mnt/extra-addons" not in entries:
+            entries.append("/mnt/extra-addons")
+        return "addons_path = " + ",".join(entries)
+
+    return re.sub(r"addons_path\s*=\s*(.+)", _add, conf_text, count=1)
+
 @router.get("/{tenant_id}/config")
 def get_instance_config(tenant_id: str):
     namespace = f"odoo-{tenant_id}"
@@ -463,14 +486,21 @@ def update_instance_config(tenant_id: str, req: ConfigUpdateRequest):
 @router.patch("/{tenant_id}/config")
 def patch_instance_config(tenant_id: str, req: ConfigUpdateRequest):
     namespace = f"odoo-{tenant_id}"
-    from k8s_utils.client import patch_namespaced_config_map, restart_deployment
+    from k8s_utils.client import patch_namespaced_config_map, restart_deployment, read_namespaced_config_map
     import json
     update_data = {}
     if req.odoo_conf is not None:
         update_data["odoo.conf"] = req.odoo_conf
     if req.addons_repos is not None:
         update_data["addons.json"] = json.dumps(req.addons_repos)
-        
+        # Self-heal legacy tenants whose odoo.conf predates always-on
+        # /mnt/extra-addons (see _ensure_extra_addons_path docstring).
+        if req.odoo_conf is None:
+            current = read_namespaced_config_map(namespace, "odoo-conf")
+            patched_conf = _ensure_extra_addons_path(current.get("odoo.conf", ""))
+            if patched_conf and patched_conf != current.get("odoo.conf", ""):
+                update_data["odoo.conf"] = patched_conf
+
     if not update_data:
         return {"status": "no change"}
         

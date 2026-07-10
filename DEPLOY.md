@@ -439,6 +439,36 @@ curl -s 'https://staging.aeisoftware.com/web/bundle/portal.assets_chatter?lang=e
 
 ---
 
+## "Sync Addons to Instance" no mostraba módulos nuevos (2026-07-10)
+
+> **Incidente:** al agregar un repo en la pestaña "Addon Repos" de un `saas.instance` y hacer clic en
+> "Sync Addons to Instance", el `clone-addons` init container clonaba y simlinkeaba los módulos
+> correctamente en `/mnt/extra-addons`, pero no aparecían en Apps del tenant.
+>
+> **Causa:** `configmap_manifest()` (`portal/k8s_utils/manifests.py`) solo agregaba `/mnt/extra-addons`
+> al `addons_path` **en el momento del aprovisionamiento inicial**, y solo si el tenant ya tenía
+> `addons_repos` configurados en ESE momento (lógica de commit `3a11f2e`, 2026-04-16 — anterior y no
+> relacionada al fix de `symlinked_addons` de esta misma semana). El botón "Sync Addons to Instance"
+> llama a `PATCH /{tenant_id}/config`, que solo actualiza la clave `addons.json` del ConfigMap y
+> reinicia el pod — nunca volvía a renderizar `odoo.conf`. Cualquier tenant creado sin repos desde el
+> inicio quedaba permanentemente incapaz de usar la función, aunque el clonado funcionara perfecto.
+>
+> **Fix (tres partes):**
+> 1. `configmap_manifest()`: `/mnt/extra-addons` ahora se incluye **siempre** e incondicionalmente en
+>    `addons_path`. Ya no hace falta la condición — `clone-addons` garantiza un directorio válido
+>    incluso sin repos reales (crea un módulo `_placeholder` con `installable: False`).
+> 2. `PATCH /{tenant_id}/config` (`routers/instances.py`) ahora es auto-reparador: cuando se actualiza
+>    `addons_repos`, lee el `odoo.conf` actual y le inserta `/mnt/extra-addons` si falta
+>    (`_ensure_extra_addons_path()`, idempotente). Repara tenants legacy la próxima vez que usan el
+>    botón, sin migración aparte.
+> 3. El init container `odoo-init` (tenants) ahora corre `ir.module.module.update_list()` en **cada**
+>    arranque del pod — refresca la lista de Apps automáticamente tras un sync, sin que nadie tenga que
+>    entrar en modo desarrollador y hacer clic en "Update Apps List" a mano. **No instala nada** — un
+>    repo puede traer múltiples módulos/apps y cuál instalar es una decisión deliberada del staff, no
+>    automática.
+
+---
+
 ## Reparación de tenants — siempre vía portal API
 
 Los arreglos directos con `kubectl` sobre recursos de un tenant (ej. `kubectl set image deployment/odoo -n odoo-<tenant> ...`)
