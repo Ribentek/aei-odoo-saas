@@ -466,6 +466,22 @@ curl -s 'https://staging.aeisoftware.com/web/bundle/portal.assets_chatter?lang=e
 >    entrar en modo desarrollador y hacer clic en "Update Apps List" a mano. **No instala nada** — un
 >    repo puede traer múltiples módulos/apps y cuál instalar es una decisión deliberada del staff, no
 >    automática.
+>
+> **Bug adicional encontrado al verificar (3):** `odoo shell` no hace commit automático. La primera
+> versión del paso 3 llamaba `update_list()` sin `env.cr.commit()` — corría sin error (confirmado en el
+> log `ALLOW access to module.update_list`), pero los módulos nuevos desaparecían de `ir_module_module`
+> al salir el proceso (rollback silencioso). El bloque de bootstrap de esquema, un poco más arriba en el
+> mismo init container, ya hacía `env.cr.commit()` explícito — el paso nuevo no lo copió. Corregido.
+>
+> **Límite conocido — tenants creados antes de este fix:** el objeto `Deployment` de K8s de un tenant
+> ya aprovisionado queda congelado con el script del init container `odoo-init` vigente al momento de su
+> creación (o de su último re-apply completo). Un restart por sí solo (lo único que hace hoy
+> `PATCH /config`) **no** regenera esa definición desde el código actual — solo re-renderiza el
+> ConfigMap. Verificado en vivo en `administrator-sub00219`: tras el fix, el `addons_path`
+> se auto-reparó correctamente (parte 2), pero el paso `update_list()` de la parte 3 no llegó a ese pod
+> porque su Deployment es de antes del fix. Pendiente de decisión: agregar un mecanismo de re-apply
+> completo del Deployment (vía portal API, nunca `kubectl` directo) para que tenants legacy también
+> hereden cambios futuros del init container, no solo del ConfigMap.
 
 ---
 
