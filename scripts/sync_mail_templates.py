@@ -60,7 +60,8 @@ ren = env.ref("odoo_k8s_saas_subscription.email_template_renewal_invoice")
 sale_conf = env.ref("sale.mail_template_sale_confirmation")
 inv = env.ref("account.email_template_edi_invoice")
 checks = "credES=" + str("listo" in str(cred.subject)) \
-    + " credFromFallback=" + str("user.email_formatted" in str(cred.email_from)) \
+    + " credFromMainCompany=" + str("base.main_company" in str(cred.email_from)) \
+    + " credFromHardFallback=" + str("info@aeisoftware.com" in str(cred.email_from)) \
     + " provES=" + str("preparando" in str(prov.subject)) \
     + " dunAbs=" + str("get_base_url" in str(d1.body_html)) \
     + " renAbs=" + str("get_base_url" in str(ren.body_html)) \

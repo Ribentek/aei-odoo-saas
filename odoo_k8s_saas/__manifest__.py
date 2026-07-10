@@ -1,6 +1,6 @@
 {
     'name': 'Odoo K8s SaaS',
-    'version': '18.0.3.3.0',
+    'version': '18.0.3.3.2',
     'summary': 'SaaS management: provision tenants, view logs, edit config, sync addon repos',
     'category': 'Technical',
     'author': 'AEI Software',

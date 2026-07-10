@@ -7,7 +7,14 @@
             <field name="name">SaaS: Credenciales de Acceso</field>
             <field name="model_id" ref="odoo_k8s_saas.model_saas_instance"/>
             <field name="subject">¡Tu sistema Odoo está listo! — Credenciales de acceso</field>
-            <field name="email_from">{{ (object.env.company.email_formatted or user.email_formatted) }}</field>
+            <!-- object.env.company / user depend on the request's resolved user context, which
+                 is EMPTY when this template is sent from the auth='none' portal webhook
+                 (controllers/webhook.py uses request.env(su=True) with no logged-in user, so
+                 env.user and therefore env.company are both empty recordsets there — see
+                 DEPLOY.md incident 2026-07-10). env.ref() is a direct XML-ID lookup that does
+                 not depend on env.user, so it resolves identically from the webhook, the cron,
+                 and manual sends. Hardcoded string is a last-resort safety net. -->
+            <field name="email_from">{{ (object.env.ref('base.main_company').email_formatted or user.email_formatted or 'AEI Software &lt;info@aeisoftware.com&gt;') }}</field>
             <field name="email_to">{{ object.partner_id.email_formatted }}</field>
             <field name="auto_delete" eval="True"/>
             <field name="body_html" type="html">
