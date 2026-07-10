@@ -362,7 +362,7 @@ def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image
                                 # anything (a repo can carry many modules — installing the right
                                 # one is a deliberate follow-up action, not automatic). See
                                 # DEPLOY.md incident 2026-07-10.
-                                "echo \"env['ir.module.module'].update_list()\" "
+                                "echo \"env['ir.module.module'].update_list(); env.cr.commit()\" "
                                 "| odoo shell --config=/etc/odoo/odoo.conf --no-http "
                                 "|| echo 'update-apps-list: skipped (DB not ready yet)'"
                             ],
