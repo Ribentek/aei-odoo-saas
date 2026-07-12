@@ -1,4 +1,7 @@
+import hashlib
+import hmac
 import logging
+import os
 import time
 
 from odoo import fields as odoo_fields, http
@@ -57,6 +60,43 @@ class QRMercantilController(http.Controller):
 
     # ── Webhook — called by the bank when QR is paid (best-effort) ───────────
 
+    def _verify_webhook_signature(self):
+        """Verify the HMAC-SHA256 signature of the incoming webhook body.
+
+        The bank confirmation is redundant with the authenticated `/status`
+        polling fallback, so this fails closed: if no shared secret is
+        configured, or the signature is missing/invalid, the webhook is
+        rejected and payment confirmation still happens via polling.
+
+        Secret source (first non-empty wins):
+          - ir.config_parameter `payment_qr_mercantil.webhook_secret`
+          - env var QR_WEBHOOK_SECRET
+        Signature header: `X-QR-Signature` = hex(HMAC_SHA256(secret, raw_body)).
+        """
+        secret = (
+            request.env['ir.config_parameter'].sudo().get_param('payment_qr_mercantil.webhook_secret')
+            or os.getenv('QR_WEBHOOK_SECRET', '')
+        ).strip()
+        if not secret:
+            _logger.error(
+                "QR Mercantil webhook: no secret configured "
+                "(payment_qr_mercantil.webhook_secret / QR_WEBHOOK_SECRET); rejecting. "
+                "Bank confirmation still handled by authenticated status polling."
+            )
+            return False
+
+        provided = (request.httprequest.headers.get('X-QR-Signature') or '').strip()
+        if not provided:
+            _logger.warning("QR Mercantil webhook: missing X-QR-Signature header")
+            return False
+
+        raw = request.httprequest.get_data(cache=True, as_text=False)
+        expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, provided):
+            _logger.warning("QR Mercantil webhook: signature mismatch")
+            return False
+        return True
+
     @http.route(
         '/payment/qr_mercantil/webhook',
         type='json',
@@ -67,6 +107,9 @@ class QRMercantilController(http.Controller):
     )
     def webhook(self, **kwargs):
         """Receive payment notification from Banco Mercantil (best-effort)."""
+        if not self._verify_webhook_signature():
+            return request.make_json_response({'status': 'error', 'message': 'unauthorized'}, status=401)
+
         notification_data = request.get_json_data()
         _logger.info("QR Mercantil webhook recibido: %s", notification_data)
 

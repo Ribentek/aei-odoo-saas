@@ -25,6 +25,11 @@ STORAGE_CLASS = os.getenv("STORAGE_CLASS", "local-path")
 # Middleware namespace = namespace donde se despliegan los middlewares de Traefik
 # Los middlewares (odoo-headers, odoo-compress) están en kube-system (ver 02-traefik-config.yaml)
 ODOO_HEADERS_MIDDLEWARE = os.getenv("ODOO_HEADERS_MIDDLEWARE", "kube-system-odoo-headers@kubernetescrd")
+# Security response headers (HSTS, X-Frame-Options, CSP, Referrer-Policy) — see k8s/03-traefik-middleware.yaml.
+# Defaults to the aeisoftware-namespaced copy to match the ODOO_HEADERS_MIDDLEWARE override for tenants.
+SECURITY_HEADERS_MIDDLEWARE = os.getenv(
+    "SECURITY_HEADERS_MIDDLEWARE", "aeisoftware-security-headers@kubernetescrd"
+)
 # GitHub PAT for cloning private tenant addon repos (optional — public repos work without it)
 GIT_TOKEN = os.getenv("GIT_TOKEN", "")
 
@@ -511,7 +516,7 @@ def ingress_manifest(tenant_id: str) -> dict[str, Any]:
     subdomain = tenant_id  # e.g. demo → demo.aeisoftware.com
     annotations = {
         "traefik.ingress.kubernetes.io/router.entrypoints": "web,websecure",
-        "traefik.ingress.kubernetes.io/router.middlewares": ODOO_HEADERS_MIDDLEWARE,
+        "traefik.ingress.kubernetes.io/router.middlewares": f"{ODOO_HEADERS_MIDDLEWARE},{SECURITY_HEADERS_MIDDLEWARE}",
     }
 
     return {

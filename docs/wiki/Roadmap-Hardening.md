@@ -132,6 +132,24 @@ Endpoint `GET /api/v1/instances/list` implementado en `portal/routers/instances.
 
 ---
 
+## Fase 5 — Remediación Pentest 2026-07 🚧 (en `security/pentest-remediation-2026-07`)
+
+Respuesta a dos pentests black-box (informes en `strix/`). Detalle completo, matriz de findings y
+verificación en **[Security-Remediation-2026-07](Security-Remediation-2026-07)**.
+
+Resumen de código implementado (staging primero):
+- Traefik `security-headers` (HSTS/X-Frame-Options/CSP/Referrer-Policy) + `trustedIPs` Cloudflare.
+- `infra/apply-cf-security-rules.sh`: bloqueo edge de `/web/database/*` `/xmlrpc/*` `/jsonrpc`
+  `/website/info` + rate-limit de auth.
+- Addon `saas_security_hardening`: flags de cookie (Secure/HttpOnly/SameSite) + reset sin enumeración.
+- Addon `auth_signup_verify`: verificación de email en signup abierto (Turnstile en el edge CF).
+- HMAC en el webhook de `payment_qr_mercantil` (hallazgo extra, no reportado).
+
+Pendiente: aplicar/validar en staging, verificar CVEs Odoo + CSRF `/contactus`, decidir sobre
+enumeración de partner images, promover a producción.
+
+---
+
 ## Resumen de estado
 
 | Fase | Total Items | Completados | Pendientes |
@@ -141,7 +159,8 @@ Endpoint `GET /api/v1/instances/list` implementado en `portal/routers/instances.
 | Fase 2 — Estabilidad | 7 | 7 ✅ | 0 |
 | Fase 3 — Hardening | 6 | 6 ✅ | 0 |
 | Fase 4 — Mejoras & Ops | 6 | 6 ✅ | 0 |
-| **Total** | **30** | **30** | **0** |
+| Fase 5 — Remediación Pentest 2026-07 | 8 | 6 código 🚧 | deploy + verif |
+| **Total** | **38** | **36** | **2** |
 
 ---
 
