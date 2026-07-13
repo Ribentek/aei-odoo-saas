@@ -103,7 +103,6 @@ spec:
               cp -r /tmp/repo/odoo_k8s_saas_support /mnt/extra-addons/
               cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/
               cp -r /tmp/repo/saas_security_hardening /mnt/extra-addons/
-              cp -r /tmp/repo/auth_signup_verify /mnt/extra-addons/
               # Copy all modules from external_addons automatically
               if [ -d /tmp/repo/external_addons ]; then
                 cp -r /tmp/repo/external_addons/* /mnt/extra-addons/
@@ -154,7 +153,7 @@ spec:
         #    (OwlError: Missing template). Assets recompile automatically on
         #    the next request, so this is always safe — see DEPLOY.md.
         - name: flush-asset-cache
-          image: odoo:18
+          image: ghcr.io/ribentek/aei-odoo-saas/odoo:stable
           imagePullPolicy: Always
           command:
             - sh
@@ -172,7 +171,7 @@ spec:
 
       containers:
         - name: odoo
-          image: odoo:18
+          image: ghcr.io/ribentek/aei-odoo-saas/odoo:stable
           imagePullPolicy: Always
           # No --update flag: run manually with:
           # kubectl exec -n odoo-admin deploy/odoo-admin -- odoo -u <module> --stop-after-init
