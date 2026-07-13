@@ -125,6 +125,8 @@ spec:
               cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
               cp -r /tmp/repo/odoo_k8s_saas_support /mnt/extra-addons/
               cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/
+              cp -r /tmp/repo/saas_security_hardening /mnt/extra-addons/
+              cp -r /tmp/repo/auth_signup_verify /mnt/extra-addons/
               # Copy all modules from external_addons automatically
               if [ -d /tmp/repo/external_addons ]; then
                 cp -r /tmp/repo/external_addons/* /mnt/extra-addons/
@@ -163,9 +165,36 @@ spec:
             - name: odoo-conf-rendered
               mountPath: /etc/odoo
 
+        # 3. Flush cached asset bundles (ir.attachment) on every start.
+        #    With imagePullPolicy: Always on the odoo container, the running
+        #    build can legitimately differ between restarts (upstream odoo:18
+        #    updates, or a pod reschedule to a node with a different cached
+        #    digest). A stale cached bundle compiled by a different build can
+        #    register core Owl templates (e.g. mail.Thread) with mismatched
+        #    content and break "loadBundle" bundles like portal.assets_chatter
+        #    (OwlError: Missing template). Assets recompile automatically on
+        #    the next request, so this is always safe — see DEPLOY.md.
+        - name: flush-asset-cache
+          image: odoo:18
+          imagePullPolicy: Always
+          command:
+            - sh
+            - -c
+            - |
+              PGPASSWORD="${DB_PASSWORD}" psql -h postgres.aeisoftware.svc.cluster.local -p 5000 \
+                -U odoo -d staging -c "DELETE FROM ir_attachment WHERE url LIKE '/web/assets/%'" \
+                || echo "flush-asset-cache: skipped (DB not initialized yet)"
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: odoo-stg-secret
+                  key: DB_PASSWORD
+
       containers:
         - name: odoo
           image: odoo:18
+          imagePullPolicy: Always
           ports:
             - containerPort: 8069
             - containerPort: 8072
@@ -264,7 +293,7 @@ metadata:
   namespace: staging
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.middlewares: kube-system-odoo-headers@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: kube-system-odoo-headers@kubernetescrd,kube-system-security-headers@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
@@ -406,7 +435,7 @@ metadata:
   namespace: staging
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.middlewares: kube-system-odoo-headers@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: kube-system-odoo-headers@kubernetescrd,kube-system-security-headers@kubernetescrd,kube-system-portal-ratelimit@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:

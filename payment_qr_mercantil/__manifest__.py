@@ -1,6 +1,6 @@
 {
     'name': 'Payment Provider: QR Mercantil',
-    'version': '18.0.1.2.0',
+    'version': '18.0.1.3.0',
     'category': 'Accounting/Payment Providers',
     'summary': 'Pago por QR — Banco Mercantil Santa Cruz (mc4.com.bo)',
     'description': """
@@ -20,6 +20,7 @@
         'views/payment_provider_views.xml',
         'views/payment_qr_mercantil_templates.xml',
         'data/payment_provider_data.xml',
+        'data/ir_cron_poll.xml',
     ],
     'assets': {
         'web.assets_frontend': [

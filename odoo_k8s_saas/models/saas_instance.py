@@ -10,7 +10,7 @@ import logging
 import os
 import requests
 
-from odoo import models, fields, api, _
+from odoo import models, fields, api, _, SUPERUSER_ID
 from odoo.exceptions import UserError, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -295,11 +295,26 @@ class SaasInstance(models.Model):
                 logger.warning("Status check failed for %s: %s", rec.tenant_id, exc)
 
     def action_send_credentials_email(self):
+        """Send the credentials email.
+
+        Called from three contexts with very different env.uid: a logged-in
+        backend user (manual), the reconciliation cron (OdooBot), and the
+        portal's auth='none' webhook (no session at all → env.uid is None,
+        env.user is an EMPTY recordset). mail.thread's message_post() calls
+        env.user._is_public(), which does ensure_one() and raises
+        "Expected singleton: res.users()" on that empty recordset — even
+        though the email itself already sent successfully, the exception
+        propagates and the webhook logs a false "credentials email failed".
+        Pin to SUPERUSER_ID (a real user row) so message_post always has a
+        valid singleton user, regardless of the caller. See DEPLOY.md
+        incident 2026-07-10.
+        """
         self.ensure_one()
-        template = self.env.ref("odoo_k8s_saas.email_template_saas_credentials", raise_if_not_found=False)
-        if template and self.partner_id and self.partner_id.email:
-            template.send_mail(self.id, force_send=True)
-            self.message_post(body=_("Credentials email dispatched to %s") % self.partner_id.email)
+        rec = self if self.env.uid else self.with_user(SUPERUSER_ID)
+        template = rec.env.ref("odoo_k8s_saas.email_template_saas_credentials", raise_if_not_found=False)
+        if template and rec.partner_id and rec.partner_id.email:
+            template.send_mail(rec.id, force_send=True)
+            rec.message_post(body=_("Credentials email dispatched to %s") % rec.partner_id.email)
 
     def action_request_delete(self):
         """Mark instance for async deletion (instant for the user).

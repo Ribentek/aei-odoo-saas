@@ -95,6 +95,8 @@ spec:
               cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
               cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
               cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/
+              cp -r /tmp/repo/saas_security_hardening /mnt/extra-addons/
+              cp -r /tmp/repo/auth_signup_verify /mnt/extra-addons/
               # Copy all modules from external_addons automatically
               if [ -d /tmp/repo/external_addons ]; then
                 cp -r /tmp/repo/external_addons/* /mnt/extra-addons/
@@ -220,7 +222,7 @@ metadata:
   namespace: odoo-admin
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.middlewares: kube-system-odoo-headers@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: kube-system-odoo-headers@kubernetescrd,kube-system-security-headers@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:

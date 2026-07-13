@@ -8,7 +8,7 @@ metadata:
   namespace: aeisoftware
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.middlewares: kube-system-odoo-headers@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: kube-system-odoo-headers@kubernetescrd,kube-system-security-headers@kubernetescrd,kube-system-portal-ratelimit@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
@@ -76,6 +76,8 @@ spec:
               value: ceph-rbd              # dev: local-path | prod: ceph-rbd
             - name: ODOO_HEADERS_MIDDLEWARE
               value: aeisoftware-odoo-headers@kubernetescrd
+            - name: SECURITY_HEADERS_MIDDLEWARE
+              value: aeisoftware-security-headers@kubernetescrd
             - name: URL_SCHEME
               value: https
             - name: GIT_TOKEN

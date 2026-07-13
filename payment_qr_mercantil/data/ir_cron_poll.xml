@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Fallback poller: confirms recent pending QR payments the frontend poll
+         missed (e.g. customer closed the tab). Runs regardless of the webhook. -->
+    <record id="ir_cron_qr_mercantil_poll" model="ir.cron">
+        <field name="name">QR Mercantil: poll pending payments</field>
+        <field name="model_id" ref="payment.model_payment_transaction"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_qr_mercantil_poll_pending()</field>
+        <field name="interval_number">2</field>
+        <field name="interval_type">minutes</field>
+        <field name="active" eval="True"/>
+    </record>
+</odoo>

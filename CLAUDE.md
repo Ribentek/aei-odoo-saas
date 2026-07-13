@@ -137,9 +137,27 @@ GitHub Actions builds portal Docker image on push to main/18.0. Tags: `:main`, `
 
 No automated test suite in the main repo. QA is manual per the test battery in README.md (admin + tenant perspective). OCA modules in `external_addons/` have their own Odoo test framework tests.
 
+## CDN / Cloudflare
+
+`aeisoftware.com` (y subdominios staging/admin/tenants) está detrás del proxy de Cloudflare. Al depurar
+errores de frontend/assets, verificar `cf-cache-status` en los headers: el edge puede servir bundles
+`/web/assets/*` viejos aunque el servidor esté sano (se sirven con `max-age=1año, immutable` y el hash de
+la URL no cambia al recompilar). Tras purgar assets en el servidor o cambiar la imagen de Odoo, purgar
+también Cloudflare. Runbook completo en `DEPLOY.md` § "Caché de assets frontend y Cloudflare".
+
+## Reparación de tenants
+
+Nunca reparar tenants con `kubectl` directo (set image, edit deployment...): el `saas.instance` queda
+desincronizado y una instancia en `error` no vuelve sola a `ready`. Usar el portal API o las acciones del
+módulo SaaS.
+
 ## Documentation Wiki
 
-Full documentation (HLD, LLD, runbooks, API reference, QA battery) lives in the GitHub wiki: `https://github.com/Ribentek/aei-odoo-saas/wiki`. Business analysis reports live in `docs/`.
+Full documentation (HLD, LLD, runbooks, API reference, QA battery) lives in **`docs/wiki/`** (start at
+`docs/wiki/Home.md`) — migrated from the GitHub wiki on 2026-07-10 because private-repo wikis require a
+paid GitHub plan to view in the browser (the `aei-odoo-saas.wiki.git` repo still exists but nobody could
+read it from the UI). Keep documenting there as plain `.md` files, not on the GitHub wiki. Business
+analysis reports live in `docs/` directly.
 
 ## Security Patterns
 

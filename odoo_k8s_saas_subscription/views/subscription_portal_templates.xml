@@ -333,6 +333,24 @@
                 </div>
             </div>
 
+            <!-- ── Términos y condiciones del plan ─────────────────── -->
+            <div t-if="subscription.template_id and subscription.template_id.description"
+                 id="subscription_terms" class="mb-4">
+                <div class="aei-detail-card">
+                    <a href="#aeiTermsCollapse" data-bs-toggle="collapse" role="button"
+                       aria-expanded="false" aria-controls="aeiTermsCollapse"
+                       class="aei-section-title d-flex justify-content-between align-items-center text-decoration-none">
+                        <span><i class="fa fa-file-text-o me-2"/>Términos y condiciones del plan</span>
+                        <i class="fa fa-chevron-down small"/>
+                    </a>
+                    <div class="collapse" id="aeiTermsCollapse">
+                        <div class="small text-muted mt-3" style="white-space: pre-line;">
+                            <t t-esc="subscription.template_id.description"/>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- ── Tarjeta de Usuarios Activos (Púrpura — Analytics) ── -->
             <div t-if="subscription.template_id and subscription.template_id.included_users"
                  id="user_billing_details" class="mb-4">

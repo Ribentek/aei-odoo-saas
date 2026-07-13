@@ -2,7 +2,7 @@
 
 Multi-node Kubernetes SaaS provisioning for Odoo 18, running on **K3s + Ceph RBD + PostgreSQL HA + Cloudflare tunnels**.
 
-> 📖 Full documentation: [**Project Wiki**](https://github.com/Ribentek/aei-odoo-saas/wiki)
+> 📖 Full documentation: [**docs/wiki/Home.md**](docs/wiki/Home.md)
 
 ---
 

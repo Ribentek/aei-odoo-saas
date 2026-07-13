@@ -1,6 +1,6 @@
 # PostgreSQL HA Cluster — Guía Operativa
 
-> **AVISO (2026-04-11):** Las secciones de **PgBouncer** (puerto `:5002`, `:6432`, `SHOW POOLS`, `pgbouncer.ini`) en este documento son **HISTÓRICAS**. PgBouncer fue eliminado del path de tráfico en commit `100d435`. Sigue instalado en las VMs pero deshabilitado (`systemctl disable pgbouncer`). Todo el tráfico va por HAProxy `:5000` (RW) y `:5001` (RO). Para la referencia operativa vigente, ver [`Ribentek/aei-odoo-saas/wiki/PostgreSQL-Cluster-Operations`](https://github.com/Ribentek/aei-odoo-saas/wiki/PostgreSQL-Cluster-Operations).
+> **AVISO (2026-04-11):** Las secciones de **PgBouncer** (puerto `:5002`, `:6432`, `SHOW POOLS`, `pgbouncer.ini`) en este documento son **HISTÓRICAS**. PgBouncer fue eliminado del path de tráfico en commit `100d435`. Sigue instalado en las VMs pero deshabilitado (`systemctl disable pgbouncer`). Todo el tráfico va por HAProxy `:5000` (RW) y `:5001` (RO). Para la referencia operativa vigente, ver [`docs/wiki/PostgreSQL-Cluster-Operations.md`](../../docs/wiki/PostgreSQL-Cluster-Operations.md).
 
 Para instalar este stack en un cluster nuevo:
 ```bash

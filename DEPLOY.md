@@ -40,6 +40,8 @@ Si un cliente requiere Odoo con módulos pre-instalados (baked-in), la imagen de
 1. **Ruta de Addons Aislada:** Los addons custom deben copiarse obligatoriamente dentro de `/opt/custom-addons` durante el paso `RUN` del Dockerfile. No ubicar los archivos en `/mnt/extra-addons` ni otras rutas por omisión de Odoo, ya que Kubernetes monta de manera forzosa un volumen `emptyDir` allí para su `initContainer`, lo que sobreescribiría silenciosamente todas las capas instaladas.
 2. **Entrypoint Wrapper Dinámico:** Es imperativo utilizar un script de entrada (ej: `entrypoint-custom.sh`) que extienda el entrypoint original de Odoo sumando la inyección local `--addons-path="...,/opt/custom-addons"`. *Importante:* Desde Odoo 19 en adelante, cualquier ruta de un `odoo.conf` inyectada de manera global que resulte no existir en un contenedor, detonará una excepción fatal `FileNotFoundError`; por esto mismo, la inyección del path custom debe realizarse siempre desde el argumento CLI dentro de la propia imagen custom.
 
+> **Incidente (2026-07-08, corregido 2026-07-09):** El commit `4096902` agregó `/opt/odoo/symlinked_addons` al `addons_path` **global** de `configmap_manifest()` (`portal/k8s_utils/manifests.py`), violando la regla #2 de arriba con una ruta que además no coincide con la convención documentada (`/opt/custom-addons`) y que ninguna imagen ni initContainer crea. Como esa ruta no existe en la imagen estándar `odoo:18`, cada request de archivo estático (`get_static_file`/`statics` en `odoo/http.py`, que hace `os.listdir()` sobre *todas* las entradas de `addons_path`) fallaba con `FileNotFoundError` → 500, rompiendo íconos y assets estáticos en **todos** los tenants, no solo los que usan imagen custom. Ya existía precedente idéntico en el commit `5cd8cce` ("remove fatal /opt/addons global path"), que había corregido el mismo error con `/opt/custom-addons`. Se eliminó la entrada; la única forma soportada de exponer addons pre-instalados sigue siendo el patrón de las reglas #1 y #2 (imagen custom + CLI arg, nunca en `odoo.conf` global).
+
 ---
 
 ## Flujo de despliegue estándar — Producción (branch `18.0`)
@@ -341,6 +343,160 @@ kubectl create job -n backup-system --from=cronjob/filestore-dump filestore-manu
 # Seguir los logs en tiempo real
 kubectl logs -n backup-system -l app=pg-logical-dump -f
 ```
+
+---
+
+## Caché de assets frontend (ir.attachment) y Cloudflare
+
+> **Incidente (2026-07-09):** error `OwlError: Missing template: "portal.Chatter"` al abrir tickets de
+> soporte en el portal de cliente (staging y latente en producción). La causa fue una cadena de **tres cachés**:
+>
+> 1. **Odoo cachea los bundles compilados en `ir.attachment`** (URLs `/web/assets/...`). Sobreviven a los
+>    redeploys, y como el deployment usa el tag flotante `odoo:18` (cada nodo tiene cacheado un digest
+>    distinto), la BD acumula bundles compilados por builds de Odoo de épocas diferentes. Si
+>    `web.assets_frontend_lazy` y `portal.assets_chatter` registran el mismo template (ej. `mail.Thread`)
+>    con contenido distinto, `registerTemplate` lanza `Template already exists` y **todas** las
+>    registraciones del bundle chatter mueren juntas (van en un solo `odoo.define`) → "Missing template".
+> 2. **El hash de la URL del asset NO cambia** aunque el contenido recompilado cambie, y se sirve con
+>    `Cache-Control: max-age=31536000, immutable` → los navegadores retienen copias rotas.
+> 3. **Cloudflare** (proxy de `aeisoftware.com`) cachea `/web/assets/*` en el edge → purgar el servidor
+>    no basta; las peticiones ni siquiera llegan a Odoo (`cf-cache-status: HIT`).
+
+### Fix estructural (2026-07-09): auto-flush en cada arranque, en vez de fijar la imagen
+
+Se evaluó fijar `odoo:18` por digest (`odoo:18@sha256:...`), pero eso renuncia a los parches de
+seguridad que Odoo sigue publicando para la serie 18 durante ~1 año de soporte, y en la práctica el
+bump manual tiende a olvidarse. Además el estado *previo* (tag flotante + `imagePullPolicy` por
+defecto `IfNotPresent`) tampoco daba parches automáticos: cada nodo K3s descarga la imagen una vez y
+la retiene para siempre, así que los nodos divergían en silencio (se confirmó con evidencia real: el
+mismo día del incidente, un pod de `odoo-stg` se reprogramó a otro nodo por una falla no relacionada —
+ver "Notas importantes" — y ese nodo tenía un digest distinto de `odoo:18`, produciendo bundles con
+`mail.Thread` inconsistente sin que nadie tocara la imagen a propósito).
+
+En su lugar se implementó (commit posterior a `e62e9e7`):
+
+1. **`imagePullPolicy: Always`** en el contenedor `odoo` de `k8s/06-odoo-admin.yaml`,
+   `k8s/07-staging.yaml` y en `portal/k8s_utils/manifests.py` (tenants ya lo tenían) — cada restart
+   re-sincroniza con el `odoo:18` vigente en Docker Hub, autocorrigiendo el drift entre nodos y
+   manteniendo los parches de seguridad al día.
+2. **Init container `flush-asset-cache`** (nuevo, corre en cada arranque del pod, no solo en
+   incidentes) que borra `ir_attachment` con `url LIKE '/web/assets/%'` vía `psql` directo — usa la
+   misma imagen `odoo:18` del pod, así que nunca desincroniza con el build real que va a arrancar.
+   Es un no-op seguro en el primer boot (tabla vacía o inexistente, con `|| echo ...` de resguardo).
+   Los assets se recompilan solos en el siguiente request.
+
+Con esto el bug de plantillas Owl inconsistentes queda neutralizado sin importar *cuándo* ni *por qué*
+cambie la imagen (bump de Docker Hub, reschedule por falla de nodo, etc.), sin sacrificar parches.
+
+### Procedimiento manual de saneamiento (incidentes puntuales / verificación)
+
+```bash
+# 1. Purgar bundles cacheados — STAGING (para producción: -n odoo-admin, app=odoo-admin, -d admin)
+POD=$(kubectl get pod -n staging -l app=odoo-stg --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -i -n staging $POD -- odoo shell -d staging --no-http --stop-after-init <<'EOF'
+env['ir.attachment'].search([('url', '=like', '/web/assets/%')]).unlink()
+env.cr.commit()
+EOF
+
+# 2. Purgar caché de Cloudflare: dashboard → zona aeisoftware.com → Caching → Purge Cache
+#    (imprescindible — el paso 1 no invalida el edge)
+
+# 3. Verificar consistencia entre bundles (el conflicto típico es mail.Thread):
+curl -s 'https://staging.aeisoftware.com/web/bundle/portal.assets_chatter?lang=es_BO'
+```
+
+- Regla Cloudflare recomendada: **bypass de caché para `staging.aeisoftware.com`** (un entorno de pruebas
+  no debe cachearse en CDN).
+
+---
+
+## Email de credenciales roto desde el webhook anónimo (2026-07-10)
+
+> **Incidente:** el email "¡Tu sistema Odoo está listo!" no llegaba al cliente al aprovisionar una
+> instancia nueva vía compra real (`SUB00219`), aunque el mismo envío funcionaba al probarlo manualmente
+> desde `odoo shell`. Causa: `controllers/webhook.py` (`POST /saas/webhook/instance-status`, `auth='none'`,
+> `env = request.env(su=True)`) no tiene sesión de usuario — `env.uid` es `None`. Eso rompía **dos cosas
+> distintas** en cadena, y la segunda enmascaró a la primera durante el triage inicial:
+>
+> 1. `email_from` del template usaba `object.env.company`, que depende de `env.user.company_id` — con
+>    `env.uid=None`, `env.company` es un recordset VACÍO, así que el remitente rendía en blanco →
+>    `mail_from_missing`. Fix: `object.env.ref('base.main_company')` (lookup directo por XML-ID,
+>    independiente de `env.user`) + un fallback final hardcodeado como red de seguridad.
+> 2. Con (1) corregido, el email en realidad **sí se enviaba** — pero
+>    `action_send_credentials_email()` crasheaba en la línea siguiente (`self.message_post(...)`)
+>    con `ValueError: Expected singleton: res.users()`, porque `mail.thread.message_post()` llama
+>    `env.user._is_public()`, y `env.user` también es un recordset vacío bajo `env.uid=None`. Esa
+>    excepción la atrapaba el `except Exception` del webhook y logueaba **"credentials email failed"
+>    incluso cuando el correo ya se había enviado con éxito** — una falsa alarma que ocultó el bug (1)
+>    en la primera revisión. Fix: fijar `SUPERUSER_ID` con `self.with_user(SUPERUSER_ID)` cuando
+>    `self.env.uid` es falsy, para que `message_post` siempre tenga un usuario real (singleton).
+>
+> **Lección:** verificar un fix de email reenviándolo manualmente desde `odoo shell` como Administrator
+> NO reproduce el contexto real del webhook (`env.uid=None`). Para validar de verdad, reproducir el
+> contexto exacto: `env(user=None, su=True)` en shell, o disparar el webhook real via
+> `kubectl run ... curl -X POST http://<svc>:8069/saas/webhook/instance-status ...` con la
+> `SAAS_WEBHOOK_KEY` del secret `portal-secret`.
+
+---
+
+## "Sync Addons to Instance" no mostraba módulos nuevos (2026-07-10)
+
+> **Incidente:** al agregar un repo en la pestaña "Addon Repos" de un `saas.instance` y hacer clic en
+> "Sync Addons to Instance", el `clone-addons` init container clonaba y simlinkeaba los módulos
+> correctamente en `/mnt/extra-addons`, pero no aparecían en Apps del tenant.
+>
+> **Causa:** `configmap_manifest()` (`portal/k8s_utils/manifests.py`) solo agregaba `/mnt/extra-addons`
+> al `addons_path` **en el momento del aprovisionamiento inicial**, y solo si el tenant ya tenía
+> `addons_repos` configurados en ESE momento (lógica de commit `3a11f2e`, 2026-04-16 — anterior y no
+> relacionada al fix de `symlinked_addons` de esta misma semana). El botón "Sync Addons to Instance"
+> llama a `PATCH /{tenant_id}/config`, que solo actualiza la clave `addons.json` del ConfigMap y
+> reinicia el pod — nunca volvía a renderizar `odoo.conf`. Cualquier tenant creado sin repos desde el
+> inicio quedaba permanentemente incapaz de usar la función, aunque el clonado funcionara perfecto.
+>
+> **Fix (tres partes):**
+> 1. `configmap_manifest()`: `/mnt/extra-addons` ahora se incluye **siempre** e incondicionalmente en
+>    `addons_path`. Ya no hace falta la condición — `clone-addons` garantiza un directorio válido
+>    incluso sin repos reales (crea un módulo `_placeholder` con `installable: False`).
+> 2. `PATCH /{tenant_id}/config` (`routers/instances.py`) ahora es auto-reparador: cuando se actualiza
+>    `addons_repos`, lee el `odoo.conf` actual y le inserta `/mnt/extra-addons` si falta
+>    (`_ensure_extra_addons_path()`, idempotente). Repara tenants legacy la próxima vez que usan el
+>    botón, sin migración aparte.
+> 3. El init container `odoo-init` (tenants) ahora corre `ir.module.module.update_list()` en **cada**
+>    arranque del pod — refresca la lista de Apps automáticamente tras un sync, sin que nadie tenga que
+>    entrar en modo desarrollador y hacer clic en "Update Apps List" a mano. **No instala nada** — un
+>    repo puede traer múltiples módulos/apps y cuál instalar es una decisión deliberada del staff, no
+>    automática.
+>
+> **Bug adicional encontrado al verificar (3):** `odoo shell` no hace commit automático. La primera
+> versión del paso 3 llamaba `update_list()` sin `env.cr.commit()` — corría sin error (confirmado en el
+> log `ALLOW access to module.update_list`), pero los módulos nuevos desaparecían de `ir_module_module`
+> al salir el proceso (rollback silencioso). El bloque de bootstrap de esquema, un poco más arriba en el
+> mismo init container, ya hacía `env.cr.commit()` explícito — el paso nuevo no lo copió. Corregido.
+>
+> **Límite conocido — tenants creados antes de este fix:** el objeto `Deployment` de K8s de un tenant
+> ya aprovisionado queda congelado con el script del init container `odoo-init` vigente al momento de su
+> creación (o de su último re-apply completo). Un restart por sí solo (lo único que hace hoy
+> `PATCH /config`) **no** regenera esa definición desde el código actual — solo re-renderiza el
+> ConfigMap. Verificado en vivo en `administrator-sub00219`: tras el fix, el `addons_path`
+> se auto-reparó correctamente (parte 2), pero el paso `update_list()` de la parte 3 no llegó a ese pod
+> porque su Deployment es de antes del fix. Pendiente de decisión: agregar un mecanismo de re-apply
+> completo del Deployment (vía portal API, nunca `kubectl` directo) para que tenants legacy también
+> hereden cambios futuros del init container, no solo del ConfigMap.
+
+---
+
+## Reparación de tenants — siempre vía portal API
+
+Los arreglos directos con `kubectl` sobre recursos de un tenant (ej. `kubectl set image deployment/odoo -n odoo-<tenant> ...`)
+dejan el `saas.instance` desincronizado: una instancia en estado `error` **no vuelve sola a `ready`**
+aunque el pod quede sano. Las reparaciones deben hacerse a través del portal API o de las acciones del
+módulo SaaS para que el estado se actualice. (Incidente SUB00218, 2026-07-09.)
+
+**Configuración de productos SaaS:** `odoo_version = 'custom'` exige tener `custom_image` configurada
+(ej. `ghcr.io/jpvargassoruco/custom-odoo-images:18.0`). Si queda vacía, el portal genera la imagen
+inexistente `odoo:custom` → `Init:ImagePullBackOff` y la instancia queda en `error`. (Incidente SUB00218:
+producto "Odoo SaaS Enterprise (Mensual)". Pendiente: validación en código que rechace la venta con
+mensaje claro.)
 
 ---
 

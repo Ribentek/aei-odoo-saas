@@ -4,6 +4,7 @@ from lxml import etree
 FILES = [
     ("/mnt/extra-addons/odoo_k8s_saas/data/mail_template.xml", "odoo_k8s_saas"),
     ("/mnt/extra-addons/odoo_k8s_saas/data/mail_template_data.xml", "odoo_k8s_saas"),
+    ("/mnt/extra-addons/odoo_k8s_saas/data/mail_template_branding_override.xml", "odoo_k8s_saas"),
     ("/mnt/extra-addons/odoo_k8s_saas_subscription/data/mail_template_dunning.xml", "odoo_k8s_saas_subscription"),
     ("/mnt/extra-addons/odoo_k8s_saas_subscription/data/mail_template_renewal.xml", "odoo_k8s_saas_subscription"),
 ]
@@ -31,7 +32,10 @@ for path, module in FILES:
                 vals["body_html"] = inner.strip()
             elif fname in ("name", "subject", "email_from", "email_to"):
                 vals[fname] = (f.text or "").strip()
-        full_xid = module + "." + xid
+        # Records that override a template owned by another module (e.g.
+        # "sale.mail_template_sale_confirmation") already carry their own
+        # module prefix in the id attribute — don't re-prefix those.
+        full_xid = xid if "." in xid else module + "." + xid
         tmpl = env.ref(full_xid, raise_if_not_found=False)
         if tmpl:
             tmpl.write(vals)
@@ -53,9 +57,15 @@ cred = env.ref("odoo_k8s_saas.email_template_saas_credentials")
 prov = env.ref("odoo_k8s_saas.mail_template_instance_provisioned")
 d1 = env.ref("odoo_k8s_saas_subscription.email_template_dunning_level1")
 ren = env.ref("odoo_k8s_saas_subscription.email_template_renewal_invoice")
+sale_conf = env.ref("sale.mail_template_sale_confirmation")
+inv = env.ref("account.email_template_edi_invoice")
 checks = "credES=" + str("listo" in str(cred.subject)) \
+    + " credFromMainCompany=" + str("base.main_company" in str(cred.email_from)) \
+    + " credFromHardFallback=" + str("info@aeisoftware.com" in str(cred.email_from)) \
     + " provES=" + str("preparando" in str(prov.subject)) \
     + " dunAbs=" + str("get_base_url" in str(d1.body_html)) \
-    + " renAbs=" + str("get_base_url" in str(ren.body_html))
+    + " renAbs=" + str("get_base_url" in str(ren.body_html)) \
+    + " saleBranded=" + str("#1A2238" in str(sale_conf.body_html)) \
+    + " invBranded=" + str("#1A2238" in str(inv.body_html))
 print("RESULT>> " + "; ".join(results))
 print("RESULT>> " + checks)

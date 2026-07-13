@@ -25,6 +25,11 @@ STORAGE_CLASS = os.getenv("STORAGE_CLASS", "local-path")
 # Middleware namespace = namespace donde se despliegan los middlewares de Traefik
 # Los middlewares (odoo-headers, odoo-compress) están en kube-system (ver 02-traefik-config.yaml)
 ODOO_HEADERS_MIDDLEWARE = os.getenv("ODOO_HEADERS_MIDDLEWARE", "kube-system-odoo-headers@kubernetescrd")
+# Security response headers (HSTS, X-Frame-Options, CSP, Referrer-Policy) — see k8s/03-traefik-middleware.yaml.
+# Defaults to the aeisoftware-namespaced copy to match the ODOO_HEADERS_MIDDLEWARE override for tenants.
+SECURITY_HEADERS_MIDDLEWARE = os.getenv(
+    "SECURITY_HEADERS_MIDDLEWARE", "aeisoftware-security-headers@kubernetescrd"
+)
 # GitHub PAT for cloning private tenant addon repos (optional — public repos work without it)
 GIT_TOKEN = os.getenv("GIT_TOKEN", "")
 
@@ -129,9 +134,14 @@ def configmap_manifest(tenant_id: str, db_password: str, admin_password: str, ad
 
     res = PLAN_RESOURCES.get(plan, PLAN_RESOURCES["starter"])
 
-    # Only include /mnt/extra-addons when repos are configured — an empty
-    # emptyDir makes Odoo reject it as "not a valid addons directory".
-    extra_path = ",/mnt/extra-addons" if addons_repos else ""
+    # /mnt/extra-addons is always included: the clone-addons init container
+    # (see deployment_manifest) guarantees it's never an empty/invalid addons
+    # dir — it drops a placeholder module (installable: False) when no repos
+    # are configured. This must stay unconditional so that addon repos added
+    # LATER via the "Sync Addons to Instance" button (PATCH /config, which
+    # only ever touches addons.json, never re-renders odoo.conf) actually
+    # take effect — otherwise Odoo never sees the cloned modules at all
+    # regardless of "Update Apps List". See DEPLOY.md incident 2026-07-10.
     conf = f"""[options]
 db_host = {POSTGRES_HOST}
 db_port = {POSTGRES_PORT}
@@ -141,7 +151,7 @@ admin_passwd = {admin_password}
 db_name = {db_name}
 dbfilter = ^{db_name}$
 list_db = False
-addons_path = /usr/lib/python3/dist-packages/odoo/addons,/opt/odoo/symlinked_addons{extra_path}
+addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons
 data_dir = /var/lib/odoo
 workers = {res["workers"]}
 max_cron_threads = {res["cron_threads"]}
@@ -335,7 +345,31 @@ def deployment_manifest(tenant_id: str, odoo_version: str = "18.0", custom_image
                                 f"  odoo --config=/etc/odoo/odoo.conf --init={init_modules} --stop-after-init && "
                                 "  echo \"env.ref('base.user_admin').write({'password': '${APP_ADMIN_PASSWORD}'}); env.cr.commit()\" "
                                 "    | odoo shell --config=/etc/odoo/odoo.conf; "
-                                "fi"
+                                "fi; "
+                                # Flush cached asset bundles on every start (not just first boot).
+                                # With imagePullPolicy=Always the running Odoo build can legitimately
+                                # change between restarts; stale ir.attachment rows compiled by a
+                                # different build can register core Owl templates (e.g. mail.Thread)
+                                # with mismatched content and break "loadBundle" bundles like
+                                # portal.assets_chatter (Missing template errors). Assets recompile
+                                # automatically on next request, so this is always safe.
+                                f"PGPASSWORD=$DB_PASSWORD psql -h {POSTGRES_HOST} -p {POSTGRES_PORT} "
+                                f"-U {pg_user} -d {db_name} "
+                                "-c \"DELETE FROM ir_attachment WHERE url LIKE '/web/assets/%'\" "
+                                "2>/dev/null || echo 'flush-asset-cache: skipped (DB not ready yet)'; "
+                                # Refresh the addon module list on every start (not just first
+                                # boot). Needed for "Sync Addons to Instance" (routers/instances.py
+                                # patch_instance_config): repos get cloned into /mnt/extra-addons
+                                # and the pod restarts, but Odoo never auto-discovers new module
+                                # folders on disk — normally someone has to enable developer mode
+                                # and click "Update Apps List" by hand. update_list() only
+                                # registers/refreshes ir.module.module rows; it does NOT install
+                                # anything (a repo can carry many modules — installing the right
+                                # one is a deliberate follow-up action, not automatic). See
+                                # DEPLOY.md incident 2026-07-10.
+                                "echo \"env['ir.module.module'].update_list(); env.cr.commit()\" "
+                                "| odoo shell --config=/etc/odoo/odoo.conf --no-http "
+                                "|| echo 'update-apps-list: skipped (DB not ready yet)'"
                             ],
                             "env": _init_env,
                             "volumeMounts": _vol_mounts,
@@ -482,7 +516,7 @@ def ingress_manifest(tenant_id: str) -> dict[str, Any]:
     subdomain = tenant_id  # e.g. demo → demo.aeisoftware.com
     annotations = {
         "traefik.ingress.kubernetes.io/router.entrypoints": "web,websecure",
-        "traefik.ingress.kubernetes.io/router.middlewares": ODOO_HEADERS_MIDDLEWARE,
+        "traefik.ingress.kubernetes.io/router.middlewares": f"{ODOO_HEADERS_MIDDLEWARE},{SECURITY_HEADERS_MIDDLEWARE}",
     }
 
     return {

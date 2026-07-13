@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!-- Reskin de plantillas nativas de Odoo (sale/account) con el mismo
+             branding AEI (header #1A2238, acento #6C63FF) usado en los correos
+             de provisioning/credenciales. El contenido dinámico (líneas de
+             pedido, impuestos, dirección, método de pago) se preserva intacto;
+             solo se envuelve con el header/footer de marca.
+             Estos son registros de OTROS módulos (sale, account) — noupdate=1
+             hace que un `-u` normal no los reescriba; usar
+             scripts/sync_mail_templates.py para sincronizarlos en un deploy
+             existente (ver odoo18_noupdate_behavior en memoria del proyecto). -->
+
+        <record id="sale.mail_template_sale_confirmation" model="mail.template">
+            <field name="body_html" type="html">
+<div style="margin: 0; padding: 0;">
+    <table width="600" style="margin: 20px auto; font-family: Arial, sans-serif; border-collapse: collapse;">
+        <tr>
+            <td style="background-color: #1A2238; padding: 20px; color: #fff; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0; font-size: 22px;">&#128230; Tu orden ha sido confirmada</h1>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 30px; background-color: #f9f9f9; border: 1px solid #ddd;">
+    <p style="margin: 0px; padding: 0px; font-size: 13px;">
+        Hola,
+        <br/><br/>
+        <t t-set="tx_sudo" t-value="object.get_portal_last_transaction()"/>
+        Tu orden <span style="font-weight:bold;" t-out="object.name or ''">S00049</span> por <span style="font-weight:bold;" t-out="format_amount(object.amount_total, object.currency_id) or ''">$ 10.00</span>
+        <t t-if="object.state == 'sale' or (tx_sudo and tx_sudo.state in ('done', 'authorized'))">
+            se confirmó.<br/>
+            Agradecemos su confianza.
+        </t>
+        <t t-elif="tx_sudo and tx_sudo.state == 'pending'">
+            está pendiente. Se confirmará cuando se reciba el pago.
+            <t t-if="object.reference">
+                Tu referencia de pago es <span style="font-weight:bold;" t-out="object.reference or ''"></span>.
+            </t>
+        </t>
+        <br/>
+        <t t-set="documents" t-value="object._get_product_documents()"/>
+        <t t-if="documents">
+            <br/>
+            <t t-if="len(documents)>1">
+                Aquí tienes algunos documentos adicionales que pueden interesarte:
+            </t>
+            <t t-else="">
+                Aquí tienes un documento adicional que puede interesarte:
+            </t>
+            <ul style="margin-bottom: 0;">
+                <t t-foreach="documents" t-as="document">
+                    <li style="font-size: 13px;">
+                        <a t-out="document.ir_attachment_id.name"
+                            t-att-href="object.get_portal_url('/document/' + str(document.id))"
+                            t-att-target="target"/>
+                    </li>
+                </t>
+            </ul>
+        </t>
+        <br/>
+        No dude en ponerse en contacto con nosotros si tiene alguna pregunta.
+        <t t-if="not is_html_empty(object.user_id.signature)">
+            <br/><br/>
+            <t t-out="object.user_id.signature or ''">--<br/>Mitchell Admin</t>
+        </t>
+        <br/><br/>
+    </p>
+<t t-if="hasattr(object, 'website_id') and object.website_id">
+    <div style="margin: 0px; padding: 0px;">
+        <table width="100%" style="color: #454748; font-size: 12px; border-collapse: collapse; white-space: nowrap;">
+            <tr style="border-bottom: 2px solid #dee2e6;">
+                <td style="width: 150px;"><span style="font-weight:bold;">Productos</span></td>
+                <td></td>
+                <td width="15%" align="center"><span style="font-weight:bold;">Cantidad</span></td>
+                <td width="20%" align="right">
+                    <span style="font-weight:bold;">
+                        <t t-if="object.website_id.show_line_subtotals_tax_selection == 'tax_excluded'">
+                            Sin IVA
+                        </t>
+                        <t t-else="">
+                            Con IVA
+                        </t>
+                    </span>
+                </td>
+            </tr>
+        </table>
+        <t t-set="current_subtotal" t-value="0"/>
+        <t t-foreach="object.order_line" t-as="line">
+            <t
+                t-set="line_subtotal"
+                t-value="
+                    line.price_subtotal
+                    if object.website_id.show_line_subtotals_tax_selection == 'tax_excluded'
+                    else line.price_total
+                "
+            />
+            <t t-set="current_subtotal" t-value="current_subtotal + line_subtotal"/>
+            <t
+                t-if="(not hasattr(line, 'is_delivery') or not line.is_delivery) and (
+                    line.display_type in ['line_section', 'line_note']
+                    or line.product_type == 'combo'
+                )"
+            >
+                <table width="100%" style="color: #454748; font-size: 12px; border-collapse: collapse;">
+                    <t t-set="loop_cycle_number" t-value="loop_cycle_number or 0" />
+                    <tr t-att-style="'background-color: #f2f2f2' if loop_cycle_number % 2 == 0 else 'background-color: #ffffff'">
+                        <t t-set="loop_cycle_number" t-value="loop_cycle_number + 1" />
+                        <td colspan="4">
+                            <t t-if="line.display_type == 'line_section' or line.product_type == 'combo'">
+                                <span style="font-weight:bold;" t-out="line.name or ''">Taking care of Trees Course</span>
+                                <t t-set="current_section" t-value="line"/>
+                                <t t-set="current_subtotal" t-value="0"/>
+                            </t>
+                            <t t-elif="line.display_type == 'line_note'">
+                                <i t-out="line.name or ''">Taking care of Trees Course</i>
+                            </t>
+                        </td>
+                    </tr>
+                </table>
+            </t>
+            <t t-elif="(not hasattr(line, 'is_delivery') or not line.is_delivery)">
+                <table width="100%" style="color: #454748; font-size: 12px; border-collapse: collapse;">
+                    <t t-set="loop_cycle_number" t-value="loop_cycle_number or 0" />
+                    <tr t-att-style="'background-color: #f2f2f2' if loop_cycle_number % 2 == 0 else 'background-color: #ffffff'">
+                        <t t-set="loop_cycle_number" t-value="loop_cycle_number + 1" />
+                        <td style="width: 150px;">
+                            <img t-attf-src="/web/image/product.product/{{ line.product_id.id }}/image_128" style="width: 64px; height: 64px; object-fit: contain;" alt="Product image"></img>
+                        </td>
+                        <td align="left" t-out="line.product_id.name or ''">	Taking care of Trees Course</td>
+                        <td width="15%" align="center" t-out="line.product_uom_qty or ''">1</td>
+                        <td width="20%" align="right"><span style="font-weight:bold; white-space: nowrap;">
+                        <t t-if="object.website_id.show_line_subtotals_tax_selection == 'tax_excluded'">
+                            <t t-out="format_amount(line.price_reduce_taxexcl, object.currency_id) or ''">$ 10.00</t>
+                        </t>
+                        <t t-else="">
+                            <t t-out="format_amount(line.price_reduce_taxinc, object.currency_id) or ''">$ 10.00</t>
+                        </t>
+                        </span></td>
+                    </tr>
+                </table>
+            </t>
+            <t
+                t-if="current_section and (
+                    line_last
+                    or object.order_line[line_index+1].display_type == 'line_section'
+                    or object.order_line[line_index+1].product_type == 'combo'
+                    or (
+                        line.combo_item_id
+                        and not object.order_line[line_index+1].combo_item_id
+                    )
+                ) and not line.is_downpayment"
+            >
+                <t t-set="current_section" t-value="None"/>
+                <table width="100%" style="color: #454748; font-size: 12px; border-collapse: collapse;">
+                    <t t-set="loop_cycle_number" t-value="loop_cycle_number or 0"/>
+                    <tr t-att-style="'background-color: #f2f2f2' if loop_cycle_number % 2 == 0 else 'background-color: #ffffff'">
+                        <t t-set="loop_cycle_number" t-value="loop_cycle_number + 1"/>
+                        <td style="width: 100%" align="right">
+                            <span style="font-weight: bold;">Subtotal:</span>
+                            <span t-out="format_amount(current_subtotal, object.currency_id) or ''">$ 10.00</span>
+                        </td>
+                    </tr>
+                </table>
+            </t>
+        </t>
+    </div>
+    <div style="margin: 0px; padding: 0px;" t-if="hasattr(object, 'carrier_id') and object.carrier_id">
+        <table width="100%" style="color: #454748; font-size: 12px; border-spacing: 0px 4px; white-space: nowrap;" align="right">
+            <tr>
+                <td style="width: 60%"/>
+                <td style="width: 30%; border-top: 1px solid #dee2e6;" align="right"><span style="font-weight:bold;">Envío:</span></td>
+                <td style="width: 10%; border-top: 1px solid #dee2e6;" align="right" t-out="format_amount(object.amount_delivery, object.currency_id) or ''">$ 0.00</td>
+            </tr>
+            <tr>
+                <td style="width: 60%"/>
+                <td style="width: 30%;" align="right"><span style="font-weight:bold;">Base imponible:</span></td>
+                <td style="width: 10%;" align="right" t-out="format_amount(object.amount_untaxed, object.currency_id) or ''">$ 10.00</td>
+            </tr>
+        </table>
+    </div>
+    <div style="margin: 0px; padding: 0px;" t-else="">
+        <table width="100%" style="color: #454748; font-size: 12px; border-spacing: 0px 4px; white-space: nowrap;" align="right">
+            <tr>
+                <td style="width: 60%"/>
+                <td style="width: 30%; border-top: 1px solid #dee2e6;" align="right"><span style="font-weight:bold;">Base imponible:</span></td>
+                <td style="width: 10%; border-top: 1px solid #dee2e6;" align="right" t-out="format_amount(object.amount_untaxed, object.currency_id) or ''">$ 10.00</td>
+            </tr>
+        </table>
+    </div>
+    <div style="margin: 0px; padding: 0px;">
+        <table width="100%" style="color: #454748; font-size: 12px; border-spacing: 0px 4px; white-space: nowrap;" align="right">
+            <tr>
+                <td style="width: 60%"/>
+                <td style="width: 30%;" align="right"><span style="font-weight:bold;">Impuestos:</span></td>
+                <td style="width: 10%;" align="right" t-out="format_amount(object.amount_tax, object.currency_id) or ''">$ 0.00</td>
+            </tr>
+            <tr>
+                <td style="width: 60%"/>
+                <td style="width: 30%; border-top: 1px solid #dee2e6;" align="right"><span style="font-weight:bold;">Total:</span></td>
+                <td style="width: 10%; border-top: 1px solid #dee2e6;" align="right" t-out="format_amount(object.amount_total, object.currency_id) or ''">$ 10.00</td>
+            </tr>
+        </table>
+    </div>
+    <div t-if="object.partner_invoice_id" style="margin: 0px; padding: 0px;">
+        <table width="100%" style="color: #454748; font-size: 12px;">
+            <tr>
+                <td style="padding-top: 10px;">
+                    <span style="font-weight:bold;">Dirección de facturación:</span>
+                    <t t-out="object.partner_invoice_id.street or ''">1201 S Figueroa St</t>
+                    <t t-out="object.partner_invoice_id.city or ''">Los Angeles</t>
+                    <t t-out="object.partner_invoice_id.state_id.name or ''">California</t>
+                    <t t-out="object.partner_invoice_id.zip or ''">90015</t>
+                    <t t-out="object.partner_invoice_id.country_id.name or ''">United States</t>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <span style="font-weight:bold;">Método de pago:</span>
+                    <t t-if="tx_sudo.token_id">
+                        <t t-out="tx_sudo.token_id.display_name or ''"></t>
+                    </t>
+                    <t t-else="">
+                        <t t-out="tx_sudo.provider_id.sudo().name or ''"></t>
+                    </t>
+                    (<t t-out="format_amount(tx_sudo.amount, object.currency_id) or ''">$ 10.00</t>)
+                </td>
+            </tr>
+        </table>
+    </div>
+    <div t-if="object.partner_shipping_id and not object.only_services" style="margin: 0px; padding: 0px;">
+        <table width="100%" style="color: #454748; font-size: 12px;">
+            <tr>
+                <td>
+                    <br/>
+                    <span style="font-weight:bold;">Dirección de envío:</span>
+                    <t t-out="object.partner_shipping_id.street or ''">1201 S Figueroa St</t>
+                    <t t-out="object.partner_shipping_id.city or ''">Los Angeles</t>
+                    <t t-out="object.partner_shipping_id.state_id.name or ''">California</t>
+                    <t t-out="object.partner_shipping_id.zip or ''">90015</t>
+                    <t t-out="object.partner_shipping_id.country_id.name or ''">United States</t>
+                </td>
+            </tr>
+        </table>
+        <table t-if="hasattr(object, 'carrier_id') and object.carrier_id" width="100%" style="color: #454748; font-size: 12px;">
+            <tr>
+                <td>
+                    <span style="font-weight:bold;">Método de envío:</span>
+                    <t t-out="object.carrier_id.name or ''"></t>
+                    <t t-if="object.amount_delivery == 0.0">
+                        (Gratis)
+                    </t>
+                    <t t-else="">
+                        (<t t-out="format_amount(object.amount_delivery, object.currency_id) or ''">$ 10.00</t>)
+                    </t>
+                </td>
+            </tr>
+            <tr t-if="object.carrier_id.carrier_description">
+                <td>
+                    <strong>Descripción de envío:</strong>
+                    <t t-out="object.carrier_id.carrier_description"/>
+                </td>
+            </tr>
+        </table>
+    </div>
+</t>
+            </td>
+        </tr>
+        <tr>
+            <td style="background-color: #555; padding: 15px; color: #aaa; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px;">
+                Mensaje automático de la plataforma AEI Software SaaS.
+            </td>
+        </tr>
+    </table>
+</div>
+            </field>
+        </record>
+
+        <record id="account.email_template_edi_invoice" model="mail.template">
+            <field name="body_html" type="html">
+<div style="margin: 0; padding: 0;">
+    <table width="600" style="margin: 20px auto; font-family: Arial, sans-serif; border-collapse: collapse;">
+        <tr>
+            <td style="background-color: #1A2238; padding: 20px; color: #fff; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0; font-size: 22px;">&#129534; Tu factura está lista</h1>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 30px; background-color: #f9f9f9; border: 1px solid #ddd;">
+    <p style="margin: 0px; padding: 0px; font-size: 13px;">
+        Apreciable
+        <t t-if="object.partner_id.parent_id">
+            <t t-out="object.partner_id.name or ''">Brandon Freeman</t> (<t t-out="object.partner_id.parent_id.name or ''">Azure Interior</t>),
+        </t>
+        <t t-else="">
+            <t t-out="object.partner_id.name or ''">Brandon Freeman</t>,
+        </t>
+        <br /><br />
+        A continuación encontrarás tu
+        <t t-if="object.name">
+            factura <span style="font-weight:bold;" t-out="object.name or ''">INV/2021/05/0005</span>
+        </t>
+        <t t-else="">
+            factura
+        </t>
+        <t t-if="object.invoice_origin">
+            (con referencia: <t t-out="object.invoice_origin or ''">SUB003</t>)
+        </t>
+        por <span style="font-weight:bold;" t-out="format_amount(object.amount_total, object.currency_id) or ''">$ 143,750.00</span>
+        de <t t-out="object.company_id.name or ''">YourCompany</t>.
+        <t t-if="object.payment_state in ('paid', 'in_payment')">
+            Esta factura ya está pagada.
+        </t>
+        <t t-else="">
+            Por favor realiza el pago a la brevedad posible.
+            <t t-if="object.payment_reference">
+                <br /><br />
+                Utiliza la siguiente referencia para tu pago: <strong t-out="object.payment_reference or ''">INV/2021/05/0005</strong>
+                <t t-if="object.partner_bank_id">
+                    en la cuenta <strong t-out="object.partner_bank_id.acc_number"/>
+                </t>
+                .
+            </t>
+        </t>
+        <t t-if="hasattr(object, 'timesheet_count') and object.timesheet_count">
+            <br /><br />
+            PD: puedes revisar tus partes de horas <a t-att-href="'/my/timesheets?search_in=invoice&amp;search=%s' % object.name">desde el portal.</a>
+        </t>
+        <br /><br />
+        No dude en ponerse en contacto con nosotros si tiene alguna pregunta.
+        <t t-if="not is_html_empty(object.invoice_user_id.signature)">
+            <br /><br />
+            <t t-out="object.invoice_user_id.signature or ''">--<br/>Mitchell Admin</t>
+        </t>
+    </p>
+            </td>
+        </tr>
+        <tr>
+            <td style="background-color: #555; padding: 15px; color: #aaa; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px;">
+                Mensaje automático de la plataforma AEI Software SaaS.
+            </td>
+        </tr>
+    </table>
+</div>
+            </field>
+        </record>
+
+    </data>
+</odoo>
