@@ -93,14 +93,6 @@ spec:
                 secretKeyRef:
                   name: portal-secret
                   key: SAAS_WEBHOOK_KEY
-            # Per-instance support user (odoo-init first boot). Optional: if the
-            # key is missing the support user is simply not created.
-            - name: SUPPORT_USER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: portal-secret
-                  key: SUPPORT_USER_PASSWORD
-                  optional: true
           livenessProbe:
             httpGet:
               path: /healthz

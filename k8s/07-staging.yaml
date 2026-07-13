@@ -28,8 +28,7 @@ metadata:
 #
 #   kubectl -n staging create secret generic portal-secret \
 #     --from-literal=API_KEY=<staging-api-key> \
-#     --from-literal=SAAS_WEBHOOK_KEY=<staging-webhook-key> \
-#     --from-literal=SUPPORT_USER_PASSWORD=<support-user-password>
+#     --from-literal=SAAS_WEBHOOK_KEY=<staging-webhook-key>
 #
 #   kubectl -n staging create secret generic odoo-stg-secret \
 #     --from-literal=DB_PASSWORD=<same-as-prod> \
@@ -391,14 +390,6 @@ spec:
                 secretKeyRef:
                   name: portal-secret
                   key: SAAS_WEBHOOK_KEY
-            # Per-instance support user (odoo-init first boot). Optional: if the
-            # key is missing the support user is simply not created.
-            - name: SUPPORT_USER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: portal-secret
-                  key: SUPPORT_USER_PASSWORD
-                  optional: true
           livenessProbe:
             httpGet:
               path: /healthz

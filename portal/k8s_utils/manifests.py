@@ -35,10 +35,11 @@ GIT_TOKEN = os.getenv("GIT_TOKEN", "")
 # Default language installed + set as default on every new tenant (Bolivia market).
 TENANT_DEFAULT_LANG = os.getenv("TENANT_DEFAULT_LANG", "es_BO")
 # Per-instance support user (created at first boot by odoo-init). The password is
-# platform-wide, injected from portal-secret (SUPPORT_USER_PASSWORD). If unset, the
-# support user is simply not created — provisioning still succeeds.
+# generated per tenant by the portal (like app_admin_password), stored in the tenant
+# odoo-secret (SUPPORT_PASSWORD) and returned in the create response so the SaaS
+# admin addon can log it in the saas.instance chatter. If empty, the support user
+# is simply not created — provisioning still succeeds.
 SUPPORT_USER_LOGIN = os.getenv("SUPPORT_USER_LOGIN", "soporte@aeisoftware.com")
-SUPPORT_USER_PASSWORD = os.getenv("SUPPORT_USER_PASSWORD", "")
 
 # ── Per-plan compute resources ───────────────────────────────────────────────
 # Each plan tier gets different Odoo workers, CPU, and RAM limits.
@@ -93,7 +94,7 @@ def pvc_manifest(tenant_id: str, storage_gi: int = 10) -> dict[str, Any]:
     }
 
 
-def secret_manifest(tenant_id: str, db_password: str, admin_password: str, app_admin_password: str) -> dict[str, Any]:
+def secret_manifest(tenant_id: str, db_password: str, admin_password: str, app_admin_password: str, support_password: str = "") -> dict[str, Any]:
     """Per-tenant secret with DB password and Odoo admin password."""
     import base64
     def b64(s: str) -> str:
@@ -111,9 +112,9 @@ def secret_manifest(tenant_id: str, db_password: str, admin_password: str, app_a
             "DB_PASSWORD": b64(db_password),
             "ADMIN_PASSWD": b64(admin_password),
             "APP_ADMIN_PASSWORD": b64(app_admin_password),
-            # Platform-wide support-user password (may be empty — odoo-init skips
+            # Per-tenant support-user password (may be empty — odoo-init skips
             # creating the support user when blank).
-            "SUPPORT_PASSWORD": b64(SUPPORT_USER_PASSWORD),
+            "SUPPORT_PASSWORD": b64(support_password),
         },
     }
 
@@ -703,6 +704,7 @@ def all_manifests(
     plan: str = "starter",
     git_token: str = "",
     install_modules: str = "",
+    support_password: str = "",
 ) -> list[dict]:
     """Return all manifests in apply-order."""
     manifests = [
@@ -711,7 +713,7 @@ def all_manifests(
         resourcequota_manifest(tenant_id, plan=plan),
         network_policy_manifest(tenant_id),
         pvc_manifest(tenant_id, storage_gi),
-        secret_manifest(tenant_id, db_password, admin_password, app_admin_password),
+        secret_manifest(tenant_id, db_password, admin_password, app_admin_password, support_password),
         configmap_manifest(tenant_id, db_password, admin_password, addons_repos, plan=plan),
     ]
     if git_token:

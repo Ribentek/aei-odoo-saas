@@ -123,6 +123,10 @@ class InstanceResponse(BaseModel):
     status: str
     user_count: int = 0
     app_admin_password: str = None
+    # Per-tenant support user credentials (created at first boot by odoo-init).
+    # Only returned on create — the SaaS addon logs them in the instance chatter.
+    support_login: str = None
+    support_password: str = None
 
 
 # ── endpoints ────────────────────────────────────────────────────────────────
@@ -216,6 +220,7 @@ def create_instance(req: CreateInstanceRequest, background_tasks: BackgroundTask
     db_password = _gen_password()
     admin_password = _gen_password()
     app_admin_password = _gen_password(16)
+    support_password = _gen_password(16)
     pg_user = f"odoo-{req.tenant_id}"
     db_name = f"odoo_{req.tenant_id}"
 
@@ -239,6 +244,7 @@ def create_instance(req: CreateInstanceRequest, background_tasks: BackgroundTask
         plan=req.plan,
         git_token=GIT_TOKEN,
         install_modules=req.install_modules,
+        support_password=support_password,
     )
 
     for m in manifests:
@@ -276,6 +282,8 @@ def create_instance(req: CreateInstanceRequest, background_tasks: BackgroundTask
         url=f"{URL_SCHEME}://{req.tenant_id}.{BASE_DOMAIN}",
         status="provisioning",
         app_admin_password=app_admin_password,
+        support_login=SUPPORT_USER_LOGIN,
+        support_password=support_password,
     )
 
 
