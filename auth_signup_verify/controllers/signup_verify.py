@@ -1,4 +1,5 @@
 import logging
+import secrets
 
 from odoo import _, http, SUPERUSER_ID
 from odoo.http import request
@@ -38,10 +39,14 @@ class AuthSignupVerify(AuthSignupHome):
         # Odoo (it only sets su=True). Use with_user(SUPERUSER_ID) so env.uid is the
         # superuser, which the guard (self._uid in self._ids) allows.
         user = request.env.user.with_user(SUPERUSER_ID)
+        verify_token = secrets.token_urlsafe(24)
         try:
-            token = user.partner_id.signup_prepare()  # fresh signup token
-            user.write({"active": False, "email_verified": False})
-            self._send_verification_email(user, token)
+            user.write({
+                "active": False,
+                "email_verified": False,
+                "email_verify_token": verify_token,
+            })
+            self._send_verification_email(user, verify_token)
         finally:
             # Drop the session created by do_signup — no access until verified.
             request.session.logout(keep_db=True)
@@ -82,20 +87,18 @@ class AuthSignupVerify(AuthSignupHome):
         if not token:
             return request.render("auth_signup_verify.email_verify_result", {"ok": False})
 
-        partner = (
-            request.env["res.partner"]
-            .sudo()
-            .search([("signup_token", "=", token)], limit=1)
-        )
+        # Inactive users are excluded by default, so active_test=False is required
+        # to find the account we just deactivated. Superuser env for the write.
         user = (
-            request.env["res.users"].sudo().search([("partner_id", "=", partner.id)], limit=1)
-            if partner
-            else request.env["res.users"]
+            request.env["res.users"]
+            .with_user(SUPERUSER_ID)
+            .with_context(active_test=False)
+            .search([("email_verify_token", "=", token)], limit=1)
         )
         if not user:
             return request.render("auth_signup_verify.email_verify_result", {"ok": False})
 
-        user.write({"active": True, "email_verified": True})
-        partner.sudo().signup_end()  # consume the token
+        # Activate and consume the token (single use).
+        user.write({"active": True, "email_verified": True, "email_verify_token": False})
         _logger.info("auth_signup_verify: email confirmed for user id=%s", user.id)
         return request.render("auth_signup_verify.email_verify_result", {"ok": True})
