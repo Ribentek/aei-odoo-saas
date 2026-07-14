@@ -121,7 +121,7 @@ spec:
             - |
               echo "==> [STAGING] Cloning branch: $ADDON_GIT_BRANCH"
               AUTH="${GIT_TOKEN:+${GIT_TOKEN}@}"
-              git clone --depth=1 -b "$ADDON_GIT_BRANCH" "https://${AUTH}github.com/Ribentek/aei-odoo-saas.git" /tmp/repo
+              git clone --depth=1 -b "$ADDON_GIT_BRANCH" "https://${AUTH}github.com/AEI-Software/aei-odoo-saas.git" /tmp/repo
               cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
               cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
               cp -r /tmp/repo/odoo_k8s_saas_support /mnt/extra-addons/
@@ -175,7 +175,7 @@ spec:
         #    (OwlError: Missing template). Assets recompile automatically on
         #    the next request, so this is always safe — see DEPLOY.md.
         - name: flush-asset-cache
-          image: ghcr.io/ribentek/aei-odoo-saas/odoo:main
+          image: ghcr.io/aei-software/aei-odoo-saas/odoo:main
           imagePullPolicy: Always
           command:
             - sh
@@ -193,7 +193,7 @@ spec:
 
       containers:
         - name: odoo
-          image: ghcr.io/ribentek/aei-odoo-saas/odoo:main
+          image: ghcr.io/aei-software/aei-odoo-saas/odoo:main
           imagePullPolicy: Always
           ports:
             - containerPort: 8069
@@ -348,7 +348,7 @@ spec:
       serviceAccountName: saas-portal
       containers:
         - name: portal
-          image: ghcr.io/ribentek/aei-odoo-saas/portal:main
+          image: ghcr.io/aei-software/aei-odoo-saas/portal:main
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

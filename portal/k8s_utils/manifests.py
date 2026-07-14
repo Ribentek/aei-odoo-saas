@@ -19,7 +19,7 @@ POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres.aeisoftware.svc.cluster.loc
 POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5000"))          # HAProxy primary
 POSTGRES_PORT_PRIMARY = int(os.getenv("POSTGRES_PORT_PRIMARY", "5000"))  # Same (legacy compat)
 POSTGRES_USER = os.getenv("POSTGRES_USER", "odoo")
-ODOO_IMAGE = os.getenv("ODOO_IMAGE", "ghcr.io/ribentek/aei-odoo-saas/odoo:stable")
+ODOO_IMAGE = os.getenv("ODOO_IMAGE", "ghcr.io/aei-software/aei-odoo-saas/odoo:stable")
 # local-path para dev local K3s, ceph-rbd para producción Cloud
 STORAGE_CLASS = os.getenv("STORAGE_CLASS", "local-path")
 # Middleware namespace = namespace donde se despliegan los middlewares de Traefik

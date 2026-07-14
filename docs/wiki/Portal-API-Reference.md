@@ -63,7 +63,7 @@ Provision a new tenant. Applies K8s manifests and returns immediately with `stat
   "plan": "starter",
   "storage_gi": 10,
   "odoo_version": "19.0",
-  "custom_image": "ghcr.io/Ribentek/custom-odoo-images:19.0",
+  "custom_image": "ghcr.io/aei-software/custom-odoo-images:19.0",
   "addons_repos": [
     {
       "url": "https://github.com/OCA/server-tools.git",

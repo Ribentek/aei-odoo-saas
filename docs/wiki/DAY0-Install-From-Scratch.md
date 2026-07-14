@@ -32,7 +32,7 @@ export KUBECONFIG=~/.kube/config
 
 ```bash
 cd ~
-git clone https://github.com/Ribentek/aei-odoo-saas.git
+git clone https://github.com/AEI-Software/aei-odoo-saas.git
 cd aei-odoo-saas
 ```
 

@@ -31,7 +31,7 @@ GitHub Actions  (.github/workflows/ci.yaml)
 | Field | Value |
 |:---|:---|
 | Registry | `ghcr.io` (GitHub Container Registry) |
-| Image | `ghcr.io/Ribentek/aei-odoo-saas/portal` |
+| Image | `ghcr.io/aei-software/aei-odoo-saas/portal` |
 | Tags | see table below |
 | Pull policy | `Always` (set in deployment manifests) |
 

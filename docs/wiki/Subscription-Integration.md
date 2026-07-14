@@ -335,7 +335,7 @@ The bridge module is loaded alongside the base addon by the init container in `0
 ```bash
 # Clone main SaaS repo (base addon + bridge module + payment module + OCA)
 git clone --depth=1 -b main \
-  https://github.com/Ribentek/aei-odoo-saas.git /tmp/repo
+  https://github.com/AEI-Software/aei-odoo-saas.git /tmp/repo
 cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
 cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
 cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/

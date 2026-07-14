@@ -108,7 +108,7 @@ kubectl logs -n odoo-admin -l app=odoo-admin -f
 kubectl rollout restart deployment/portal -n aeisoftware
 
 # Portal: build and deploy
-docker build -t ghcr.io/ribentek/aei-odoo-saas/portal:main portal/
+docker build -t ghcr.io/aei-software/aei-odoo-saas/portal:main portal/
 kubectl rollout restart deployment/portal -n aeisoftware
 ```
 

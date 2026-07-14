@@ -35,7 +35,7 @@ Internet → Cloudflare Tunnel → Traefik (K3s ingress)
 | `payment_qr_mercantil` | Pago por QR — Banco Mercantil Santa Cruz (mc4.com.bo) |
 | `odoo_k8s_saas` | UI admin de instancias SaaS (kanban, estados, acciones K8s) |
 | `odoo_k8s_saas_subscription` | Bridge de suscripciones OCA ↔ SaaS instances |
-| `subscription_oca` | Contratos de suscripción recurrentes — clonado desde [Ribentek/odoo18-oca-contract](https://github.com/Ribentek/odoo18-oca-contract) (OCA fork 18.0) |
+| `subscription_oca` | Contratos de suscripción recurrentes — vendored en `external_addons/` desde [OCA/contract](https://github.com/OCA/contract) (branch `18.0`); sincronizar con `scripts/sync-oca-contract.sh` |
 
 ---
 
@@ -81,7 +81,7 @@ Internet → Cloudflare Tunnel → Traefik (K3s ingress)
 > **Prerequisites:**
 > - Ubuntu 22.04 / Debian 12 VM con `root` o `sudo`
 > - Dominio DNS apuntando al servidor (o Cloudflare tunnel token)
-> - GHCR token con acceso read a `ghcr.io/Ribentek/aei-odoo-saas/portal:latest`
+> - GHCR token con acceso read a `ghcr.io/aei-software/aei-odoo-saas/portal:latest`
 > - Credenciales MC4 del Banco Mercantil (si usas `payment_qr_mercantil` en producción)
 
 ---
@@ -89,7 +89,7 @@ Internet → Cloudflare Tunnel → Traefik (K3s ingress)
 ### Paso 1 — Clonar el repositorio
 
 ```bash
-git clone https://github.com/Ribentek/aei-odoo-saas.git
+git clone https://github.com/AEI-Software/aei-odoo-saas.git
 cd aei-odoo-saas
 ```
 
@@ -370,8 +370,9 @@ aei-odoo-saas/
     └── ci.yaml                       # CI: build + push portal:latest a GHCR en push a main
 ```
 
-> **Nota:** `subscription_oca` no está en este repositorio. El init container lo clona de
-> [Ribentek/odoo18-oca-contract](https://github.com/Ribentek/odoo18-oca-contract) (branch `18.0`).
+> **Nota:** `subscription_oca` está vendored en `external_addons/` (fuente:
+> [OCA/contract](https://github.com/OCA/contract) branch `18.0`, sha en
+> `external_addons/OCA_CONTRACT_SHA`). Refrescar con `scripts/sync-oca-contract.sh`.
 
 ---
 
@@ -393,7 +394,7 @@ El workflow [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml) usa permiso
 
 En cada push a `main`:
 1. Build imagen Docker del portal con Docker Buildx + layer cache
-2. Push a `ghcr.io/ribentek/aei-odoo-saas/portal:latest` y `:$SHA`
+2. Push a `ghcr.io/aei-software/aei-odoo-saas/portal:latest` y `:$SHA`
 3. **Deploy manual:** SSH al servidor y ejecutar `kubectl -n aeisoftware rollout restart deployment/portal`
 
 > El deploy del portal no es automático. Tras el push a GHCR, el operador debe reiniciar el deployment manualmente.
@@ -445,7 +446,7 @@ python3 infra/delete-instance.py demo-company
 
 ## Multi-Version y Custom Images
 
-La plataforma soporta la creación de instancias con versiones específicas de Odoo (17.0, 18.0, 19.0) y el uso de **imágenes de Docker personalizadas** por cliente (ej: `ghcr.io/ribentek/aei-odoo-saas/custom-odoo-images:19.0`).
+La plataforma soporta la creación de instancias con versiones específicas de Odoo (17.0, 18.0, 19.0) y el uso de **imágenes de Docker personalizadas** por cliente (ej: `ghcr.io/aei-software/custom-odoo-images:19.0`).
 - La configuración de versión se define en el **Producto SaaS** (Pestaña "SaaS Configuration").
 - Cuando se vende una suscripción con una imagen personalizada, Kubernetes forzará un `imagePullPolicy: Always` para asegurar que el tenant siempre utilice la última versión de su imagen custom sin depender del caché del nodo.
 - Los módulos integrados en la imagen personalizada deben ubicarse en `/opt/custom-addons` para evitar ser sobrescritos por los volúmenes efímeros de Kubernetes.

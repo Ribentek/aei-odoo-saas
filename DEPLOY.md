@@ -10,8 +10,8 @@
 | Base de datos Odoo admin | `postgres` (filtro: `^admin$`) |
 | Namespace portal / postgres | `aeisoftware` |
 | Deployment portal | `portal` |
-| Imagen portal | `ghcr.io/ribentek/aei-odoo-saas/portal:latest` |
-| Repo en initContainer | `https://github.com/Ribentek/aei-odoo-saas.git` (branch `18.0`, `--depth=1`) |
+| Imagen portal | `ghcr.io/aei-software/aei-odoo-saas/portal:latest` |
+| Repo en initContainer | `https://github.com/AEI-Software/aei-odoo-saas.git` (branch `18.0`, `--depth=1`) |
 | Addons copiados | `payment_qr_mercantil`, `odoo_k8s_saas`, `odoo_k8s_saas_subscription` (del repo principal) + `subscription_oca` (local en `external_addons/`) |
 [cert-manager]: https://cert-manager.io/
 
@@ -27,7 +27,7 @@
 | Base de datos Odoo staging | `staging` |
 | Namespace / deployment portal | `staging` / `portal-stg` |
 | Dominio | staging.aeisoftware.com |
-| Repo en initContainer | `https://github.com/Ribentek/aei-odoo-saas.git` (branch `main`, `--depth=1`) |
+| Repo en initContainer | `https://github.com/AEI-Software/aei-odoo-saas.git` (branch `main`, `--depth=1`) |
 
 > **Nunca mezclar comandos:** namespace `staging` usa branch `main`; namespace `odoo-admin` usa branch `18.0`.
 
@@ -493,7 +493,7 @@ aunque el pod quede sano. Las reparaciones deben hacerse a través del portal AP
 módulo SaaS para que el estado se actualice. (Incidente SUB00218, 2026-07-09.)
 
 **Configuración de productos SaaS:** `odoo_version = 'custom'` exige tener `custom_image` configurada
-(ej. `ghcr.io/jpvargassoruco/custom-odoo-images:18.0`). Si queda vacía, el portal genera la imagen
+(ej. `ghcr.io/aei-software/custom-odoo-images:18.0`). Si queda vacía, el portal genera la imagen
 inexistente `odoo:custom` → `Init:ImagePullBackOff` y la instancia queda en `error`. (Incidente SUB00218:
 producto "Odoo SaaS Enterprise (Mensual)". Pendiente: validación en código que rechace la venta con
 mensaje claro.)

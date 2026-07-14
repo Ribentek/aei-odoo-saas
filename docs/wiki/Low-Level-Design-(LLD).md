@@ -10,7 +10,7 @@
 | `postgres` | Service | ClusterIP, port 5432 |
 | `postgres-data` | PVC | `local-path`, RWO, 50Gi |
 | `postgres-secret` | Secret | `POSTGRES_PASSWORD` |
-| `portal` | Deployment | `ghcr.io/Ribentek/aei-odoo-saas/portal:latest`, 1 replica |
+| `portal` | Deployment | `ghcr.io/aei-software/aei-odoo-saas/portal:latest`, 1 replica |
 | `portal` | Service | ClusterIP, port 8000 |
 | `portal-secret` | Secret | `API_KEY` |
 | `portal-ingress` | Ingress | `portal.aeisoftware.com → portal:8000`, Traefik |
@@ -43,12 +43,11 @@ initContainers:
       - sh
       - -c
       - |
-        git clone --depth=1 -b "$ADDON_GIT_BRANCH" https://github.com/Ribentek/aei-odoo-saas.git /tmp/repo
+        git clone --depth=1 -b "$ADDON_GIT_BRANCH" https://github.com/AEI-Software/aei-odoo-saas.git /tmp/repo
         cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
         cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
         cp -r /tmp/repo/payment_qr_mercantil /mnt/extra-addons/
-        git clone --depth=1 -b 18.0 https://github.com/Ribentek/odoo18-oca-contract.git /tmp/oca-contract
-        cp -r /tmp/oca-contract/subscription_oca /mnt/extra-addons/
+        cp -r /tmp/repo/external_addons/* /mnt/extra-addons/  # incluye subscription_oca (vendored desde OCA/contract 18.0)
         git clone --depth=1 -b 19.0 https://github.com/muk-it/muk_base.git /tmp/muk-base
         for d in /tmp/muk-base/muk_*/; do cp -r "$d" /mnt/extra-addons/; done
   - name: render-config

@@ -47,7 +47,7 @@ spec:
       serviceAccountName: saas-portal
       containers:
         - name: portal
-          image: ghcr.io/ribentek/aei-odoo-saas/portal:stable
+          image: ghcr.io/aei-software/aei-odoo-saas/portal:stable
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

@@ -4,7 +4,7 @@
 
 Para instalar este stack en un cluster nuevo:
 ```bash
-git clone https://github.com/Ribentek/aei-odoo-saas.git
+git clone https://github.com/AEI-Software/aei-odoo-saas.git
 cd aei-odoo-saas/infra/postgres-ha
 ```
 

@@ -19,7 +19,7 @@ The addon is loaded into the admin Odoo pod via an `initContainer` that clones t
 
 ```bash
 # Clone main SaaS repo
-git clone --depth=1 https://github.com/Ribentek/aei-odoo-saas.git /tmp/repo
+git clone --depth=1 https://github.com/AEI-Software/aei-odoo-saas.git /tmp/repo
 cp -r /tmp/repo/odoo_k8s_saas /mnt/extra-addons/
 cp -r /tmp/repo/odoo_k8s_saas_subscription /mnt/extra-addons/
 cp -r /tmp/repo/external_addons/subscription_oca /mnt/extra-addons/
