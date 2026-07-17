@@ -27,6 +27,7 @@ Multi-node K3s platform (Ceph RBD storage) that hosts multiple Odoo 18 tenants w
 ### Production Environment (Cloud K3s)
 - [Production Cloud Environment](Production-Cloud-Environment.md) — architecture differences, storage (`ceph-rbd`), and Ceph-specific security context fixes in production.
 - [Cloud Portability](Cloud-Portability.md) — inventario por entorno (`infra/environments/`), matriz de proveedores (AWS/Vultr/GCP/bare-metal), Longhorn vs Ceph, runbook del testbed cruzoil.
+- [Cloud Provider Cost Analysis](Cloud-Provider-Cost-Analysis.md) — costo comparado Vultr/AWS/Azure/GCP para arranque mínimo, auto-scaling nativo de workers por proveedor, fricciones (Blob no es S3 en Azure).
 
 ### General
 - [Secrets Management](Secrets-Management.md) — `.secrets.env` workflow, credential rotation, drift diagnosis.
